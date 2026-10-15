@@ -27,6 +27,8 @@ Run `pnpm build:extension`, open `chrome://extensions`, enable **Developer mode*
 ## Deployment
 
 - Cloudflare Pages: build command `pnpm build:web`; output directory `apps/web/dist`.
+- Direct Cloudflare release: run `pnpm deploy:cloudflare`. This builds the web app and deploys
+  `apps/web/dist` to the `cvtailor` Pages project, avoiding workspace-root auto-detection errors.
 - Supabase: apply migrations, deploy the four functions, create secrets, and add the first administrator with:
 
 ```sql
@@ -34,3 +36,7 @@ insert into public.admins (user_id) values ('<auth-user-uuid>');
 ```
 
 See `supabase/README.md` for backend deployment details.
+
+When a release is requested, push the commit to GitHub first, run `pnpm deploy:cloudflare`, and
+verify [cvtailor.pages.dev](https://cvtailor.pages.dev). A release is complete only when both the
+GitHub push and Cloudflare deployment succeed.

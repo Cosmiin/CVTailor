@@ -8,12 +8,14 @@
     "build": "pnpm -r build",
     "build:web": "pnpm --filter @cv-maker/web build",
     "build:extension": "pnpm --filter @cv-maker/extension build",
+    "deploy:cloudflare": "pnpm build:web && wrangler pages deploy apps/web/dist --project-name cvtailor --branch main",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "supabase": "^2.121.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "wrangler": "^4.151.0"
   }
 }
