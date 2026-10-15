@@ -8,5 +8,6 @@ coverage/
 .DS_Store
 *.log
 .supabase/
+supabase/.temp/
 .wrangler/
 apps/extension/release/
