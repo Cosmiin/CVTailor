@@ -31,6 +31,12 @@ export const contactSchema = z.object({
   linkedin: z.string().max(300).default(""),
 });
 
+export const profilePhotoSchema = z.object({
+  dataUrl: z.string().max(750_000),
+  fileName: z.string().max(240).default("profile-photo.jpg"),
+  visible: z.boolean().default(true),
+});
+
 export const experienceSchema = z.object({
   id: z.string().min(1).max(120),
   company: z.string().max(160).default(""),
@@ -79,6 +85,7 @@ export const customSectionSchema = z.object({
 export const baseCVSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
   contact: contactSchema.default({}),
+  photo: profilePhotoSchema.nullable().default(null),
   summary: textItemSchema.default({ id: "summary", text: "", visible: true }),
   experience: z.array(experienceSchema).max(30).default([]),
   education: z.array(educationSchema).max(20).default([]),

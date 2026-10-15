@@ -49,7 +49,13 @@ export const cvSchema = z.object({
   sectionOrder: z.array(z.string()),
 });
 
-export const tailoredSchema = cvSchema.extend({
+const profilePhoto = z.object({
+  dataUrl: z.string().max(750_000), fileName: z.string(), visible: z.boolean(),
+});
+
+export const storedCVSchema = cvSchema.extend({ photo: profilePhoto.nullable().optional() });
+
+export const tailoredSchema = storedCVSchema.extend({
   jobId: z.string().uuid(),
   templateId: z.enum(["clarity", "compact"]),
   generatedAt: z.string().datetime(),

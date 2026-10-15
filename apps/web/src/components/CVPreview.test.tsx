@@ -18,4 +18,11 @@ describe("CVPreview", () => {
     };
     expect(renderToStaticMarkup(<CVPreview cv={cv} />)).toContain("inferred-preview");
   });
+
+  it("renders the reusable profile photo when enabled", () => {
+    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true } };
+    const html = renderToStaticMarkup(<CVPreview cv={cv} />);
+    expect(html).toContain("resume-photo");
+    expect(html).toContain("Alex Morgan profile");
+  });
 });

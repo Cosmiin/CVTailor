@@ -22,4 +22,10 @@ describe("shared CV rules", () => {
     expect(hasUnconfirmedClaims(cv)).toBe(true);
     expect(exportableCV(cv).skills.some((skill) => skill.id === "inferred")).toBe(false);
   });
+
+  it("preserves a user photo without treating it as an inferred claim", () => {
+    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true } };
+    expect(exportableCV(cv).photo?.dataUrl).toBe(cv.photo.dataUrl);
+    expect(hasUnconfirmedClaims(cv)).toBe(false);
+  });
 });
