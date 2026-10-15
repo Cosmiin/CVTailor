@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.supabase/
+.wrangler/
+apps/extension/release/

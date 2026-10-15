@@ -1,0 +1,18 @@
+{
+  "name": "cv-maker",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.9.0",
+  "scripts": {
+    "dev": "pnpm --filter @cv-maker/web dev",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @cv-maker/web build",
+    "build:extension": "pnpm --filter @cv-maker/extension build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

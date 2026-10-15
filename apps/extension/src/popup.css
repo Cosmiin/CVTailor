@@ -1,0 +1,31 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17201f; background: #f4f1ea; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 352px; min-height: 450px; }
+button, input { font: inherit; }
+.popup { min-height: 450px; padding: 20px; }
+header { padding-bottom: 19px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid #d7d7cf; }
+header span { width: 30px; height: 30px; border-radius: 8px; color: white; background: #163f3b; display: grid; place-items: center; }
+header svg { width: 16px; }
+header strong { font-size: 15px; }
+form, .capture-card, .state { padding-top: 28px; display: grid; gap: 14px; }
+.kicker { color: #245c55; font-size: 9px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+h2 { margin: -5px 0 0; font-size: 25px; line-height: 1.08; letter-spacing: -.035em; }
+p { margin: -3px 0 5px; color: #67716e; font-size: 12px; line-height: 1.55; }
+label { display: grid; gap: 5px; color: #47524f; font-size: 10px; font-weight: 700; }
+input { min-height: 41px; padding: 0 10px; border: 1px solid #cbd0ca; border-radius: 7px; background: white; }
+button { min-height: 42px; border: 0; border-radius: 8px; color: white; background: #163f3b; display: flex; align-items: center; justify-content: center; gap: 7px; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .55; }
+button svg { width: 16px; }
+.error { padding: 9px 10px; border-radius: 7px; color: #803732; background: #ffebe7; font-size: 10px; }
+.signed-in { padding: 12px 0; border-bottom: 1px solid #dedfd8; display: flex; align-items: center; justify-content: space-between; color: #68716f; font-size: 10px; }
+.signed-in button { min-height: 28px; width: 28px; padding: 0; color: #68716f; background: transparent; }
+.capture-card > svg { width: 42px; height: 42px; padding: 10px; border-radius: 12px; color: #163f3b; background: #dce9e5; }
+.capture-card small { display: flex; align-items: center; justify-content: center; gap: 5px; color: #7b8481; font-size: 9px; }
+.capture-card small svg { width: 12px; }
+.state { text-align: center; justify-items: center; padding-top: 54px; }
+.state > svg { width: 45px; height: 45px; padding: 11px; border-radius: 13px; color: #163f3b; background: #dce9e5; }
+.state.success > span { width: 53px; height: 53px; border-radius: 50%; color: #285d39; background: #dff0e4; display: grid; place-items: center; }
+.state button { width: 100%; }
+.state code { font-size: 9px; }
+.spin { animation: spin .85s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
