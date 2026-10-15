@@ -1,11 +1,12 @@
-import { handleOptions, json, requireUser } from "../_shared/http.ts";
+import { adminClient, handleOptions, json, requireUser } from "../_shared/http.ts";
 import { runStructuredResponse } from "../_shared/openai.ts";
 import { jobStructuredJsonSchema, jobStructuredSchema } from "../_shared/schema.ts";
 
 const PARSER_VERSION = "job-v2-2026-10-15";
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
-const normalize = (text: string) => text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
-  .replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 100_000);
+const normalize = (text: string, maxLength = 100_000) => text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
+  .replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, maxLength);
 
 const privateIPv4 = (host: string) => {
   const parts = host.split(".").map(Number);
@@ -110,6 +111,43 @@ const parseJob = async (input: {
   };
 };
 
+type ParseInput = Parameters<typeof parseJob>[0];
+
+const processJobInBackground = async (jobId: string, userId: string, input: ParseInput) => {
+  const client = adminClient();
+  try {
+    const parsed = await parseJob(input);
+    const job = parsed.value;
+    const { error } = await client.from("jobs").update({
+      title: job.title,
+      company: job.company.displayName,
+      structured_data: job,
+      location: job.location.original ?? "",
+      date_posted: job.datePosted,
+      employment_type: job.employmentType,
+      seniority: job.seniority,
+      salary_min: job.compensation.minimum,
+      salary_max: job.compensation.maximum,
+      salary_currency: job.compensation.currency,
+      salary_period: job.compensation.period,
+      source_language: job.sourceLanguage,
+      parse_status: "completed",
+      parse_warnings: job.warnings,
+      parsed_at: new Date().toISOString(),
+      parser_model: parsed.model,
+    }).eq("id", jobId).eq("user_id", userId);
+    if (error) throw new Error("job_parse_save_failed");
+  } catch (error) {
+    const parseCode = error instanceof Error ? error.message : "job_parse_failed";
+    await client.from("jobs").update({
+      parse_status: "failed",
+      parse_warnings: [parseCode],
+      structured_data: null,
+      parsed_at: new Date().toISOString(),
+    }).eq("id", jobId).eq("user_id", userId);
+  }
+};
+
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
   try {
@@ -119,11 +157,6 @@ Deno.serve(async (request) => {
     const fetched = body.description ? null : await fetchJob(String(body.url ?? ""));
     const description = normalize(String(body.description ?? fetched?.description ?? ""));
     if (description.length < 80) return json(request, { error: "job_text_too_short", fallback: "paste_or_extension" }, 422);
-    const dailyLimit = Math.max(1, Number(Deno.env.get("JOB_PARSE_DAILY_LIMIT") ?? 50));
-    const since = new Date(); since.setUTCHours(0, 0, 0, 0);
-    const { count: capturesToday } = await client.from("jobs").select("id", { count: "exact", head: true })
-      .gte("created_at", since.toISOString());
-    if ((capturesToday ?? 0) >= dailyLimit) return json(request, { error: "job_parse_daily_limit" }, 429);
     const url = String(body.url ?? fetched?.url ?? "").slice(0, 2000);
     const titleHint = String(body.title ?? fetched?.title ?? "Untitled role").slice(0, 240);
     const companyHint = String(body.company ?? "").slice(0, 240);
@@ -131,6 +164,15 @@ Deno.serve(async (request) => {
     const { data: existing } = await client.from("jobs").select("*")
       .eq("capture_fingerprint", captureFingerprint).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (existing?.parse_status === "completed") return json(request, { job: existing, reused: true });
+    const pendingIsFresh = existing?.parse_status === "pending" &&
+      Date.now() - new Date(existing.updated_at).getTime() < 10 * 60 * 1000;
+    if (pendingIsFresh) return json(request, { job: existing, reused: true }, 202);
+
+    const dailyLimit = Math.max(1, Number(Deno.env.get("JOB_PARSE_DAILY_LIMIT") ?? 50));
+    const since = new Date(); since.setUTCHours(0, 0, 0, 0);
+    const { count: capturesToday } = await client.from("jobs").select("id", { count: "exact", head: true })
+      .gte("created_at", since.toISOString());
+    if ((capturesToday ?? 0) >= dailyLimit) return json(request, { error: "job_parse_daily_limit" }, 429);
 
     const baseRow = {
       user_id: user.id,
@@ -141,47 +183,25 @@ Deno.serve(async (request) => {
       capture_method: captureMethod,
       capture_fingerprint: captureFingerprint,
       parser_version: PARSER_VERSION,
+      structured_data: null,
+      parse_status: "pending",
+      parse_warnings: [],
+      parsed_at: null,
+      parser_model: null,
     };
-
-    let row: Record<string, unknown>;
-    try {
-      const parsed = await parseJob({
-        url, title: titleHint, company: companyHint, description,
-        pageTitle: normalize(String(body.pageTitle ?? fetched?.title ?? ""), 500),
-        sourceLanguage: normalize(String(body.sourceLanguage ?? ""), 80),
-        structuredMetadata: body.structuredMetadata,
-      });
-      const job = parsed.value;
-      row = {
-        ...baseRow,
-        title: job.title,
-        company: job.company.displayName,
-        structured_data: job,
-        location: job.location.original ?? "",
-        date_posted: job.datePosted,
-        employment_type: job.employmentType,
-        seniority: job.seniority,
-        salary_min: job.compensation.minimum,
-        salary_max: job.compensation.maximum,
-        salary_currency: job.compensation.currency,
-        salary_period: job.compensation.period,
-        source_language: job.sourceLanguage,
-        parse_status: "completed",
-        parse_warnings: job.warnings,
-        parsed_at: new Date().toISOString(),
-        parser_model: parsed.model,
-      };
-    } catch (parseError) {
-      const parseCode = parseError instanceof Error ? parseError.message : "job_parse_failed";
-      row = { ...baseRow, parse_status: "failed", parse_warnings: [parseCode], structured_data: null };
-    }
-
     const operation = existing
-      ? client.from("jobs").update(row).eq("id", existing.id).select().single()
-      : client.from("jobs").insert(row).select().single();
+      ? client.from("jobs").update(baseRow).eq("id", existing.id).select().single()
+      : client.from("jobs").insert(baseRow).select().single();
     const { data, error } = await operation;
     if (error) throw new Error("job_save_failed");
-    return json(request, { job: data }, 201);
+    const parseInput: ParseInput = {
+      url, title: titleHint, company: companyHint, description,
+      pageTitle: normalize(String(body.pageTitle ?? fetched?.title ?? ""), 500),
+      sourceLanguage: normalize(String(body.sourceLanguage ?? ""), 80),
+      structuredMetadata: body.structuredMetadata,
+    };
+    EdgeRuntime.waitUntil(processJobInBackground(data.id, user.id, parseInput));
+    return json(request, { job: data }, 202);
   } catch (error) {
     const code = error instanceof Error ? error.message : "job_import_failed";
     const status = code === "authentication_required" ? 401 : code.includes("unsafe") || code.includes("required") ? 400 : 422;

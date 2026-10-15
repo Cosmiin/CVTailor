@@ -217,19 +217,41 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .job-details > summary span svg { color: var(--green-2); }
 .job-details[open] > summary > svg { transform: rotate(90deg); }
 .job-details-body { padding: 2px 18px 20px; border-top: 1px solid #e4e5df; }
+.job-processing { margin: 0 0 28px; padding: 18px; border: 1px solid #cddbd6; border-radius: 13px; background: #f8fbfa; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.job-processing > div { display: flex; align-items: center; gap: 12px; }
+.job-processing > div > svg { flex: none; color: var(--green-2); }
+.job-processing span, .job-processing strong, .job-processing small { display: block; }
+.job-processing strong { margin-bottom: 3px; font-size: 12px; }
+.job-processing small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.job-processing.failed { border-color: #e4c4bd; background: #fff8f6; }
+.job-processing.failed > div > svg { color: #a04a40; }
+.job-details-lead { padding: 18px 0 15px; display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; }
+.job-details-lead h2 { margin: 4px 0; font-size: 20px; letter-spacing: -.025em; }
+.job-details-lead small { color: var(--muted); font-size: 10px; }
+.job-source-link { flex: none; min-height: 34px; padding: 0 11px; border: 1px solid #c9d6d2; border-radius: 7px; color: var(--green-2); background: #f3f8f6; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 750; text-decoration: none; }
+.job-source-link:hover { background: #e8f1ee; }
+.job-company-description { max-width: 900px; margin: 0 0 5px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .job-fact-grid { padding: 16px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .job-fact-grid > div { min-height: 64px; padding: 11px 12px; border-radius: 8px; background: #f2f3ee; }
 .job-fact-grid small, .job-fact-grid strong { display: block; }
 .job-fact-grid small { margin-bottom: 5px; color: #7a8380; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
 .job-fact-grid strong { font-size: 11px; line-height: 1.4; text-transform: capitalize; }
-.job-summary-text { max-width: 900px; margin: 4px 0 17px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.job-narrative { margin: 2px 0 16px; padding: 14px 15px; border-left: 3px solid #9ebbb4; background: #f4f7f5; }
+.job-narrative h3 { margin: 0 0 6px; font-size: 11px; }
+.job-narrative p { max-width: 900px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .job-list-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
 .job-list-grid section { padding: 15px; border: 1px solid #e0e2dc; border-radius: 9px; }
 .job-list-grid h3 { margin: 0 0 9px; font-size: 12px; }
 .job-list-grid ul { margin: 0; padding-left: 17px; color: #58635f; font-size: 11px; line-height: 1.55; }
 .job-list-grid li + li { margin-top: 5px; }
+.job-clean-description { margin-top: 16px; border-top: 1px solid #e1e3dd; }
+.job-clean-description > summary { padding: 14px 0 4px; color: var(--green-2); display: flex; align-items: center; gap: 5px; cursor: pointer; list-style: none; font-size: 11px; font-weight: 750; }
+.job-clean-description > summary::-webkit-details-marker { display: none; }
+.job-clean-description[open] > summary svg { transform: rotate(90deg); }
+.job-clean-description p { max-height: 420px; margin: 10px 0 0; padding: 14px; overflow: auto; border-radius: 8px; color: #4f5b58; background: #f4f5f1; white-space: pre-wrap; font-size: 10.5px; line-height: 1.65; }
 .job-warnings { margin-top: 14px; padding: 9px 11px; border-radius: 7px; color: #765820; background: #f6edd7; display: flex; align-items: flex-start; gap: 7px; font-size: 10px; line-height: 1.45; }
 .job-warnings svg { flex: none; }
+.job-warnings strong { display: block; margin-bottom: 2px; }
 
 .editor-workspace { max-width: 1380px; }
 .base-toolbar { margin: -13px 0 25px; display: flex; align-items: center; gap: 15px; }
@@ -417,6 +439,7 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
   .tailor-intro h1 { font-size: 37px; }
   .tailor-facts { padding: 0; border-left: 0; border-top: 1px solid #cfd2cb; }
   .job-fact-grid, .job-list-grid { grid-template-columns: 1fr; }
+  .job-processing, .job-details-lead { align-items: flex-start; flex-direction: column; }
   .editor-header-actions { width: 100%; flex-wrap: wrap; }
   .editor-layout { display: block; }
   .preview-column { margin-top: 25px; }

@@ -16,6 +16,8 @@ Deno.serve(async (request) => {
       client.from("base_cvs").select("document").single(),
     ]);
     if (jobError || !job) return json(request, { error: "job_not_found" }, 404);
+    if (job.parse_status === "pending") return json(request, { error: "job_still_parsing" }, 409);
+    if (job.parse_status !== "completed" || !job.structured_data) return json(request, { error: "job_parse_failed" }, 409);
     if (baseError || !base) return json(request, { error: "base_cv_required" }, 409);
 
     const { data: reservation, error: reserveError } = await client.rpc("reserve_tailor_run", {

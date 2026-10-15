@@ -80,6 +80,13 @@ export const dataApi = {
     return (data ?? []).map(rowToJob);
   },
 
+  async getJob(jobId: string): Promise<JobRecord | null> {
+    if (!isSupabaseConfigured) return readDemo().jobs.find((job) => job.id === jobId) ?? null;
+    const { data, error } = await supabase!.from("jobs").select("*").eq("id", jobId).maybeSingle();
+    if (error) throw error;
+    return data ? rowToJob(data) : null;
+  },
+
   async importJob(input: { url?: string; title?: string; company?: string; description?: string; captureMethod?: string }): Promise<JobRecord> {
     if (!isSupabaseConfigured) {
       const now = new Date().toISOString();
