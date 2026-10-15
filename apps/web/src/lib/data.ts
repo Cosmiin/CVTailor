@@ -1,5 +1,5 @@
 import type { BaseCV, CVTemplateId, JobSnapshot, QuotaState, TailoredCV } from "@cv-maker/shared";
-import { baseCVSchema, demoCV, tailoredCVSchema } from "@cv-maker/shared";
+import { demoCV, tailoredCVSchema } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 export type JobRecord = JobSnapshot & {
@@ -61,7 +61,16 @@ export const dataApi = {
     if (!isSupabaseConfigured) return readDemo().baseCV;
     const { data, error } = await supabase!.from("base_cvs").select("document").maybeSingle();
     if (error) throw error;
-    return data?.document ? baseCVSchema.parse(data.document) : null;
+    if (!data?.document) return null;
+    const document = data.document as BaseCV;
+    return {
+      ...document,
+      photo: document.photo ? {
+        ...document.photo,
+        positionX: document.photo.positionX ?? 50,
+        positionY: document.photo.positionY ?? 50,
+      } : null,
+    };
   },
 
   async saveBaseCV(cv: BaseCV, file?: File): Promise<void> {
