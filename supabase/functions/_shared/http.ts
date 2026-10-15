@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const allowedOrigins = () =>
   (Deno.env.get("ALLOWED_ORIGINS") ?? "http://localhost:5173")
-    .split(",")
+    .split(/[\s,]+/)
     .map((value) => value.trim())
     .filter(Boolean);
 

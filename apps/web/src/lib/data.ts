@@ -1,5 +1,5 @@
 import type { BaseCV, CVTemplateId, JobSnapshot, QuotaState, TailoredCV } from "@cv-maker/shared";
-import { demoCV, tailoredCVSchema } from "@cv-maker/shared";
+import { baseCVSchema, demoCV, tailoredCVSchema } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 export type JobRecord = JobSnapshot & {
@@ -22,6 +22,17 @@ const readDemo = (): DemoStore => {
 };
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
+const functionErrorMessage = async (error: unknown, data: any, fallback: string) => {
+  if (data?.error) return String(data.error);
+  const response = (error as { context?: Response } | null)?.context;
+  if (response && typeof response.clone === "function") {
+    try {
+      const body = await response.clone().json();
+      if (body?.error) return String(body.error);
+    } catch { /* The gateway did not return JSON. */ }
+  }
+  return error instanceof Error ? error.message : fallback;
+};
 const rowToJob = (row: any): JobRecord => ({
   schemaVersion: 2,
   id: row.id,
@@ -50,7 +61,7 @@ export const dataApi = {
     if (!isSupabaseConfigured) return readDemo().baseCV;
     const { data, error } = await supabase!.from("base_cvs").select("document").maybeSingle();
     if (error) throw error;
-    return data?.document ?? null;
+    return data?.document ? baseCVSchema.parse(data.document) : null;
   },
 
   async saveBaseCV(cv: BaseCV, file?: File): Promise<void> {
@@ -99,7 +110,7 @@ export const dataApi = {
       const store = readDemo(); store.jobs.unshift(job); writeDemo(store); return job;
     }
     const { data, error } = await supabase!.functions.invoke("import-job", { body: input });
-    if (error || data?.error) throw new Error(data?.error || error?.message || "Could not import this job.");
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Could not import this job."));
     return rowToJob(data.job);
   },
 
@@ -116,7 +127,7 @@ export const dataApi = {
       body: { jobId: job.id, templateId, idempotencyKey: crypto.randomUUID() },
       headers: { "idempotency-key": crypto.randomUUID() },
     });
-    if (error || data?.error) throw new Error(data?.error || error?.message || "Tailoring failed.");
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
     return tailoredCVSchema.parse(data.cv);
   },
 

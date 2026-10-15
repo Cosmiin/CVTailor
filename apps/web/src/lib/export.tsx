@@ -1,7 +1,11 @@
 import React, { type ReactNode } from "react";
 import { Document as DocxDocument, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { Document, Image, Link, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
-import { exportableCV, type TailoredCV } from "@cv-maker/shared";
+import {
+  calculateExperienceMonths, exportableCV, formatExperienceDate, formatExperienceDuration,
+  type TailoredCV,
+} from "@cv-maker/shared";
+import { cropProfilePhoto } from "./photo";
 
 const saveBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -18,6 +22,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: "Helvetica-Bold", fontSize: 25, color: "#163f3b", marginBottom: 3 },
   headline: { fontSize: 11, color: "#426460", marginBottom: 8 },
   contact: { flexDirection: "row", flexWrap: "wrap", gap: 8, color: "#4c5856", fontSize: 8 },
+  experienceTotal: { marginTop: 6, color: "#356c65", fontSize: 8, fontFamily: "Helvetica-Bold" },
   rule: { height: 2, backgroundColor: "#163f3b", marginTop: 13, marginBottom: 4 },
   section: { marginTop: 11 },
   heading: { fontFamily: "Helvetica-Bold", fontSize: 9, letterSpacing: 1.25, textTransform: "uppercase", color: "#163f3b", borderBottomWidth: 0.6, borderBottomColor: "#aac0bc", paddingBottom: 3, marginBottom: 6 },
@@ -34,7 +39,7 @@ const styles = StyleSheet.create({
   link: { color: "#356c65", fontSize: 8.2, marginTop: 2 },
 });
 
-const dateRange = (start: string, end: string) => [start, end].filter(Boolean).join(" – ");
+const dateRange = (start: string, end: string) => [formatExperienceDate(start, "start"), formatExperienceDate(end, "end")].filter(Boolean).join(" – ");
 
 const PDFSection = ({ cv, sectionKey }: { cv: TailoredCV; sectionKey: string }): ReactNode => {
   if (sectionKey === "summary" && cv.summary.visible && cv.summary.text) return <View style={styles.section}><Text style={styles.heading}>Profile</Text><Text>{cv.summary.text}</Text></View>;
@@ -52,14 +57,19 @@ const PDFSection = ({ cv, sectionKey }: { cv: TailoredCV; sectionKey: string }):
 const PDFResume = ({ cv }: { cv: TailoredCV }) => {
   const clean = exportableCV(cv);
   const contact = [clean.contact.email, clean.contact.phone, clean.contact.location, clean.contact.linkedin, clean.contact.website].filter(Boolean);
+  const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
   return <Document title={`${clean.contact.fullName} CV`} author={clean.contact.fullName}><Page size="A4" style={[styles.page, clean.templateId === "compact" ? styles.compact : {}]}>
-    <View style={styles.header}><View style={styles.identity}><Text style={styles.name}>{clean.contact.fullName}</Text>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}<View style={styles.contact}>{contact.map((item) => <Text key={item}>{item}</Text>)}</View></View>{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}</View>
+    <View style={styles.header}><View style={styles.identity}><Text style={styles.name}>{clean.contact.fullName}</Text>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}<View style={styles.contact}>{contact.map((item) => <Text key={item}>{item}</Text>)}</View>{totalExperience && <Text style={styles.experienceTotal}>{totalExperience} total experience</Text>}</View>{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}</View>
     <View style={styles.rule} />
     {clean.sectionOrder.map((key) => <PDFSection key={key} cv={clean} sectionKey={key} />)}
   </Page></Document>;
 };
 
-export const exportPDF = async (cv: TailoredCV) => saveBlob(await pdf(<PDFResume cv={cv} />).toBlob(), `${cv.contact.fullName || "CV"}.pdf`);
+const withCroppedPhoto = async (cv: TailoredCV): Promise<TailoredCV> => cv.photo?.visible
+  ? { ...cv, photo: { ...cv.photo, dataUrl: await cropProfilePhoto(cv.photo) } }
+  : cv;
+
+export const exportPDF = async (cv: TailoredCV) => saveBlob(await pdf(<PDFResume cv={await withCroppedPhoto(cv)} />).toBlob(), `${cv.contact.fullName || "CV"}.pdf`);
 
 const dataUrlBytes = (dataUrl: string) => {
   const encoded = dataUrl.split(",")[1] ?? "";
@@ -67,7 +77,8 @@ const dataUrlBytes = (dataUrl: string) => {
 };
 
 export const exportDOCX = async (cv: TailoredCV) => {
-  const clean = exportableCV(cv);
+  const clean = exportableCV(await withCroppedPhoto(cv));
+  const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
   const heading = (text: string) => new Paragraph({ text, heading: HeadingLevel.HEADING_2, spacing: { before: 220, after: 80 }, border: { bottom: { color: "AAC0BC", size: 4, style: "single", space: 4 } } });
   const children: Paragraph[] = [];
   if (clean.photo?.visible) children.push(new Paragraph({ children: [new ImageRun({ data: dataUrlBytes(clean.photo.dataUrl), transformation: { width: 72, height: 72 }, type: "jpg", altText: { title: "Profile photo", description: `${clean.contact.fullName} profile photo`, name: "Profile photo" } })], spacing: { after: 80 } }));
@@ -75,6 +86,7 @@ export const exportDOCX = async (cv: TailoredCV) => {
     new Paragraph({ children: [new TextRun({ text: clean.contact.fullName, bold: true, size: 36, color: "163F3B" })] }),
     new Paragraph({ children: [new TextRun({ text: clean.contact.headline, size: 22, color: "426460" })], spacing: { after: 80 } }),
     new Paragraph({ text: [clean.contact.email, clean.contact.phone, clean.contact.location, clean.contact.linkedin, clean.contact.website].filter(Boolean).join("  |  "), spacing: { after: 180 } }),
+    ...(totalExperience ? [new Paragraph({ children: [new TextRun({ text: `${totalExperience} total experience`, bold: true, color: "356C65", size: 17 })], spacing: { after: 100 } })] : []),
   );
   const addSection = (key: string) => {
     if (key === "summary" && clean.summary.visible && clean.summary.text) children.push(heading("PROFILE"), new Paragraph(clean.summary.text));

@@ -51,6 +51,7 @@ export const cvSchema = z.object({
 
 const profilePhoto = z.object({
   dataUrl: z.string().max(750_000), fileName: z.string(), visible: z.boolean(),
+  positionX: z.number().min(0).max(100).default(50), positionY: z.number().min(0).max(100).default(50),
 });
 
 export const storedCVSchema = cvSchema.extend({ photo: profilePhoto.nullable().optional() });

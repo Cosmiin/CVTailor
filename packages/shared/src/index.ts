@@ -36,6 +36,8 @@ export const profilePhotoSchema = z.object({
   dataUrl: z.string().max(750_000),
   fileName: z.string().max(240).default("profile-photo.jpg"),
   visible: z.boolean().default(true),
+  positionX: z.number().min(0).max(100).default(50),
+  positionY: z.number().min(0).max(100).default(50),
 });
 
 export const experienceSchema = z.object({
@@ -237,6 +239,63 @@ export const normalizeText = (value: string, maxLength = 100_000) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, maxLength);
+
+const experienceMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const monthLookup = new Map(experienceMonths.map((month, index) => [month.toLowerCase(), index]));
+
+export const parseExperienceMonth = (value: string, boundary: "start" | "end" = "start"): number | null => {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  const now = new Date();
+  if (/^(present|current|now|persent)$/i.test(normalized)) return now.getFullYear() * 12 + now.getMonth();
+  const iso = normalized.match(/^(\d{4})-(\d{2})$/);
+  if (iso) {
+    const month = Number(iso[2]);
+    return month >= 1 && month <= 12 ? Number(iso[1]) * 12 + month - 1 : null;
+  }
+  const named = normalized.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
+  if (named) {
+    const month = monthLookup.get(named[1].slice(0, 3).toLowerCase());
+    return month === undefined ? null : Number(named[2]) * 12 + month;
+  }
+  const year = normalized.match(/^(\d{4})$/);
+  return year ? Number(year[1]) * 12 + (boundary === "end" ? 11 : 0) : null;
+};
+
+export const toExperienceMonthInput = (value: string, boundary: "start" | "end" = "start"): string => {
+  if (/^(present|current|now|persent)$/i.test(value.trim())) return "";
+  const month = parseExperienceMonth(value, boundary);
+  if (month === null) return "";
+  return `${Math.floor(month / 12)}-${String(month % 12 + 1).padStart(2, "0")}`;
+};
+
+export const isPresentExperienceDate = (value: string) => /^(present|current|now|persent)$/i.test(value.trim());
+
+export const formatExperienceDate = (value: string, boundary: "start" | "end" = "start"): string => {
+  if (isPresentExperienceDate(value)) return "Present";
+  const month = parseExperienceMonth(value, boundary);
+  return month === null ? value : `${experienceMonths[month % 12]} ${Math.floor(month / 12)}`;
+};
+
+export const calculateExperienceMonths = (cv: Pick<BaseCV, "experience">, now = new Date()): number => {
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  const worked = new Set<number>();
+  cv.experience.filter((item) => item.visible).forEach((item) => {
+    const start = parseExperienceMonth(item.startDate, "start");
+    const parsedEnd = parseExperienceMonth(item.endDate, "end");
+    const end = isPresentExperienceDate(item.endDate) ? currentMonth : parsedEnd;
+    if (start === null || end === null || end < start) return;
+    for (let month = start; month <= Math.min(end, currentMonth); month++) worked.add(month);
+  });
+  return worked.size;
+};
+
+export const formatExperienceDuration = (months: number): string => {
+  if (months <= 0) return "";
+  const years = Math.floor(months / 12);
+  const remainder = months % 12;
+  return [years ? `${years} ${years === 1 ? "year" : "years"}` : "", remainder ? `${remainder} ${remainder === 1 ? "month" : "months"}` : ""].filter(Boolean).join(" ");
+};
 
 export const demoCV: BaseCV = baseCVSchema.parse({
   schemaVersion: 1,

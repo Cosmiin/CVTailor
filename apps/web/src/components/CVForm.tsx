@@ -1,13 +1,44 @@
+import { useRef, type PointerEvent } from "react";
 import {
   ArrowDown, ArrowUp, BookOpen, BriefcaseBusiness, Camera, ChevronRight, FileBadge,
   FolderKanban, Globe2, Languages, LayoutDashboard, PencilLine, Plus, Sparkles,
   Trash2, UserRound, X,
 } from "lucide-react";
-import { createId, type BaseCV, type TailoredItemProvenance } from "@cv-maker/shared";
+import {
+  calculateExperienceMonths, createId, formatExperienceDuration, isPresentExperienceDate,
+  toExperienceMonthInput, type BaseCV, type TailoredItemProvenance,
+} from "@cv-maker/shared";
 import { prepareProfilePhoto } from "../lib/photo";
 
 type Props = { cv: BaseCV; onChange: (cv: BaseCV) => void; baseMode?: boolean };
 const verified = (source = "user.edit"): TailoredItemProvenance => ({ status: "verified", sourceRefs: [source] });
+const clampPosition = (value: number) => Math.max(0, Math.min(100, value));
+
+function PhotoPositioner({ cv, onChange }: Props) {
+  const drag = useRef<{ clientX: number; clientY: number; positionX: number; positionY: number } | null>(null);
+  if (!cv.photo) return <div className="photo-editor-preview"><UserRound /></div>;
+  const positionX = cv.photo.positionX ?? 50;
+  const positionY = cv.photo.positionY ?? 50;
+  const update = (event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const nextX = clampPosition(drag.current.positionX - (event.clientX - drag.current.clientX) / bounds.width * 100);
+    const nextY = clampPosition(drag.current.positionY - (event.clientY - drag.current.clientY) / bounds.height * 100);
+    onChange({ ...cv, photo: { ...cv.photo!, positionX: nextX, positionY: nextY } });
+  };
+  return <div
+    className={`photo-editor-preview is-positionable ${cv.photo.visible ? "" : "muted"}`}
+    role="application"
+    aria-label="Drag the profile photo to position the face"
+    onPointerDown={(event) => {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      drag.current = { clientX: event.clientX, clientY: event.clientY, positionX, positionY };
+    }}
+    onPointerMove={update}
+    onPointerUp={(event) => { event.currentTarget.releasePointerCapture(event.pointerId); drag.current = null; }}
+    onPointerCancel={() => { drag.current = null; }}
+  ><img src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={{ objectPosition: `${positionX}% ${positionY}%` }} /><span>Drag to center</span></div>;
+}
 
 export function CVForm({ cv, onChange, baseMode = false }: Props) {
   const updateContact = (key: keyof BaseCV["contact"], value: string) => onChange({ ...cv, contact: { ...cv.contact, [key]: value } });
@@ -20,15 +51,16 @@ export function CVForm({ cv, onChange, baseMode = false }: Props) {
   const setPhoto = async (file?: File) => {
     if (!file) return;
     const dataUrl = await prepareProfilePhoto(file);
-    onChange({ ...cv, photo: { dataUrl, fileName: file.name, visible: true } });
+    onChange({ ...cv, photo: { dataUrl, fileName: file.name, visible: true, positionX: 50, positionY: 50 } });
   };
   const sectionLabel = (key: string) => cv.customSections.find((item) => item.id === key)?.title || key;
+  const totalExperience = formatExperienceDuration(calculateExperienceMonths(cv));
 
   return <div className="cv-form">
     <details open><summary><span><UserRound size={17} />Identity & contact</span><ChevronRight /></summary><div className="details-body">
       <div className="photo-editor">
-        <div className={`photo-editor-preview ${cv.photo?.visible ? "" : "muted"}`}>{cv.photo ? <img src={cv.photo.dataUrl} alt="CV profile" /> : <UserRound />}</div>
-        <div><strong>Profile photo</strong><p>Square-cropped automatically and reused in every tailored CV.</p><div className="inline-actions"><label className="button button-small button-ghost file-button"><Camera size={14} />{cv.photo ? "Replace" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0]).catch((error) => alert(error.message))} /></label>{cv.photo && <><button className="button button-small button-ghost" onClick={() => onChange({ ...cv, photo: { ...cv.photo!, visible: !cv.photo!.visible } })}>{cv.photo.visible ? "Hide on CV" : "Show on CV"}</button><button className="icon-button danger" aria-label="Remove photo" onClick={() => onChange({ ...cv, photo: null })}><Trash2 size={15} /></button></>}</div></div>
+        <PhotoPositioner cv={cv} onChange={onChange} baseMode={baseMode} />
+        <div><strong>Profile photo</strong><p>{cv.photo ? "Drag the photo to center your face. The same position is used for square and circular CV photos." : "Add a profile photo to reuse it in every tailored CV."}</p><div className="inline-actions"><label className="button button-small button-ghost file-button"><Camera size={14} />{cv.photo ? "Replace" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0]).catch((error) => alert(error.message))} /></label>{cv.photo && <><button className="button button-small button-ghost" onClick={() => onChange({ ...cv, photo: { ...cv.photo!, visible: !cv.photo!.visible } })}>{cv.photo.visible ? "Hide on CV" : "Show on CV"}</button><button className="icon-button danger" aria-label="Remove photo" onClick={() => onChange({ ...cv, photo: null })}><Trash2 size={15} /></button></>}</div></div>
       </div>
       <div className="form-grid contact-grid"><label>Full name<input value={cv.contact.fullName} onChange={(event) => updateContact("fullName", event.target.value)} /></label><label>Professional headline<input value={cv.contact.headline} onChange={(event) => updateContact("headline", event.target.value)} /></label><label>Email<input type="email" value={cv.contact.email} onChange={(event) => updateContact("email", event.target.value)} /></label><label>Phone<input value={cv.contact.phone} onChange={(event) => updateContact("phone", event.target.value)} /></label><label>Location<input value={cv.contact.location} onChange={(event) => updateContact("location", event.target.value)} /></label><label>LinkedIn<input value={cv.contact.linkedin} onChange={(event) => updateContact("linkedin", event.target.value)} /></label><label className="full-span">Website or portfolio<input value={cv.contact.website} onChange={(event) => updateContact("website", event.target.value)} /></label></div>
     </div></details>
@@ -36,10 +68,11 @@ export function CVForm({ cv, onChange, baseMode = false }: Props) {
     <details open><summary><span><PencilLine size={17} />Professional profile</span><ChevronRight /></summary><div className="details-body"><label>Summary<textarea rows={5} placeholder="A concise overview of your experience, strengths and direction." value={cv.summary.text} onChange={(event) => onChange({ ...cv, summary: { ...cv.summary, text: event.target.value } })} /></label></div></details>
 
     <details open><summary><span><BriefcaseBusiness size={17} />Experience <small>{cv.experience.length}</small></span><ChevronRight /></summary><div className="details-body repeat-list">
+      {totalExperience && <div className="experience-total"><BriefcaseBusiness size={16} /><span><strong>{totalExperience}</strong><small>Total professional experience, with overlapping roles counted once</small></span></div>}
       {cv.experience.length === 0 && <p className="section-empty">Add your roles, employers, dates and achievements. The AI can only tailor facts you provide here.</p>}
       {cv.experience.map((item, itemIndex) => <article className="repeat-card" key={item.id}>
         <div className="repeat-card-head"><strong>{item.role || "New role"}{item.company ? ` · ${item.company}` : ""}</strong><div><label className="visibility-toggle"><input type="checkbox" checked={item.visible} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, visible: event.target.checked } : entry) })} />Show</label><button className="icon-button danger" aria-label="Delete experience" onClick={() => onChange({ ...cv, experience: cv.experience.filter((entry) => entry.id !== item.id) })}><Trash2 size={14} /></button></div></div>
-        <div className="form-grid"><label>Role<input placeholder="Senior Product Manager" value={item.role} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry) })} /></label><label>Company<input placeholder="Company name" value={item.company} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry) })} /></label><label>Location<input placeholder="City, country or Remote" value={item.location} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry) })} /></label><div className="date-pair"><label>From<input placeholder="Jan 2021" value={item.startDate} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry) })} /></label><label>To<input placeholder="Present" value={item.endDate} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.value } : entry) })} /></label></div></div>
+        <div className="form-grid"><label>Role<input placeholder="Senior Product Manager" value={item.role} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry) })} /></label><label>Company<input placeholder="Company name" value={item.company} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry) })} /></label><label>Location<input placeholder="City, country or Remote" value={item.location} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry) })} /></label><div className="date-pair"><label>From<input type="month" min="1960-01" max="2100-12" value={toExperienceMonthInput(item.startDate, "start")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry) })} /></label><label>To<input type="month" min="1960-01" max="2100-12" disabled={isPresentExperienceDate(item.endDate)} value={toExperienceMonthInput(item.endDate, "end")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.value } : entry) })} /></label><label className="current-role"><input type="checkbox" checked={isPresentExperienceDate(item.endDate)} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.checked ? "Present" : "" } : entry) })} />Current role</label></div></div>
         <div className="achievement-label">Achievements and responsibilities</div>{item.bullets.map((bullet) => <div className="bullet-edit" key={bullet.id}><span>•</span><textarea rows={2} placeholder="Start with an action and include the result where possible." value={bullet.text} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.map((value) => value.id === bullet.id ? { ...value, text: event.target.value } : value) } : entry) })} /><button className="icon-button" aria-label="Delete bullet" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.filter((value) => value.id !== bullet.id) } : entry) })}><X size={14} /></button></div>)}
         <button className="text-button" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: [...entry.bullets, { id: createId("bullet"), text: "", visible: true, provenance: verified(baseMode ? `base.experience.${itemIndex}` : "user.edit") }] } : entry) })}><Plus size={14} />Add achievement</button>
       </article>)}

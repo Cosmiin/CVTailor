@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
-import type { BaseCV, CVTemplateId } from "@cv-maker/shared";
+import {
+  calculateExperienceMonths, formatExperienceDate, formatExperienceDuration,
+  type BaseCV, type CVTemplateId,
+} from "@cv-maker/shared";
 
-const dates = (start: string, end: string) => [start, end].filter(Boolean).join(" – ");
+const dates = (start: string, end: string) => [formatExperienceDate(start, "start"), formatExperienceDate(end, "end")].filter(Boolean).join(" – ");
 
 export function CVPreview({ cv, templateId = "clarity" }: { cv: BaseCV; templateId?: CVTemplateId }) {
   const sections: Record<string, ReactNode> = {
@@ -17,9 +20,10 @@ export function CVPreview({ cv, templateId = "clarity" }: { cv: BaseCV; template
     sections[section.id] = section.visible && section.items.some((item) => item.visible && item.text) ? <section><h2>{section.title}</h2><ul>{section.items.filter((item) => item.visible && item.text).map((item) => <li key={item.id}>{item.text}</li>)}</ul></section> : null;
   });
   const contact = [cv.contact.email, cv.contact.phone, cv.contact.location, cv.contact.linkedin, cv.contact.website].filter(Boolean);
+  const totalExperience = formatExperienceDuration(calculateExperienceMonths(cv));
 
   return <article className={`resume-paper ${templateId}`} aria-label="CV preview">
-    <header className="resume-header"><div className="resume-identity"><h1>{cv.contact.fullName || "Your name"}</h1><p className="resume-headline">{cv.contact.headline || "Professional headline"}</p><div className="resume-contact">{contact.map((item) => <span key={item}>{item}</span>)}</div></div>{cv.photo?.visible && <img className="resume-photo" src={cv.photo.dataUrl} alt={`${cv.contact.fullName || "Candidate"} profile`} />}</header>
+    <header className="resume-header"><div className="resume-identity"><h1>{cv.contact.fullName || "Your name"}</h1><p className="resume-headline">{cv.contact.headline || "Professional headline"}</p><div className="resume-contact">{contact.map((item) => <span key={item}>{item}</span>)}</div>{totalExperience && <p className="resume-experience-total">{totalExperience} total experience</p>}</div>{cv.photo?.visible && <img className="resume-photo" src={cv.photo.dataUrl} style={{ objectPosition: `${cv.photo.positionX ?? 50}% ${cv.photo.positionY ?? 50}%` }} alt={`${cv.contact.fullName || "Candidate"} profile`} />}</header>
     <div className="resume-rule" />
     {cv.sectionOrder.map((key) => <div key={key}>{sections[key]}</div>)}
   </article>;
