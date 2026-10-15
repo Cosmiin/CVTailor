@@ -26,6 +26,11 @@ button svg { width: 16px; }
 .state > svg { width: 45px; height: 45px; padding: 11px; border-radius: 13px; color: #163f3b; background: #dce9e5; }
 .state.success > span { width: 53px; height: 53px; border-radius: 50%; color: #285d39; background: #dff0e4; display: grid; place-items: center; }
 .state button { width: 100%; }
+.state button.secondary { color: #163f3b; background: #dce9e5; }
+.job-summary { width: 100%; margin: 0; padding: 4px 0; display: grid; gap: 7px; text-align: left; }
+.job-summary div { padding: 8px 10px; border: 1px solid #dedfd8; border-radius: 7px; background: rgba(255,255,255,.55); display: flex; justify-content: space-between; gap: 12px; }
+.job-summary dt { color: #7b8481; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.job-summary dd { margin: 0; color: #28322f; font-size: 10px; font-weight: 700; text-align: right; }
 .state code { font-size: 9px; }
 .spin { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

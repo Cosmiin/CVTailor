@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const SCHEMA_VERSION = 1 as const;
+export const JOB_SCHEMA_VERSION = 2 as const;
 
 export const provenanceStatusSchema = z.enum([
   "verified",
@@ -99,8 +100,54 @@ export const baseCVSchema = z.object({
     .default(["summary", "experience", "skills", "education", "projects", "certifications", "languages"]),
 });
 
+export const jobCompensationSchema = z.object({
+  minimum: z.number().nullable(),
+  maximum: z.number().nullable(),
+  currency: z.string().max(12).nullable(),
+  period: z.enum(["hour", "day", "month", "year"]).nullable(),
+  estimated: z.boolean(),
+});
+
+export const jobStructuredDataSchema = z.object({
+  schemaVersion: z.literal(JOB_SCHEMA_VERSION).default(JOB_SCHEMA_VERSION),
+  title: z.string().min(1).max(240),
+  company: z.object({
+    displayName: z.string().max(240),
+    legalName: z.string().max(240).nullable(),
+    description: z.string().max(4000).nullable(),
+  }),
+  location: z.object({
+    original: z.string().max(500).nullable(),
+    city: z.string().max(160).nullable(),
+    country: z.string().max(160).nullable(),
+    remotePolicy: z.enum(["remote", "hybrid", "onsite", "unknown"]),
+  }),
+  datePosted: z.string().nullable(),
+  validThrough: z.string().nullable(),
+  employmentType: z.string().max(160).nullable(),
+  seniority: z.string().max(160).nullable(),
+  compensation: jobCompensationSchema,
+  summary: z.string().max(4000),
+  responsibilities: z.array(z.string().max(1500)).max(40),
+  requirements: z.object({
+    required: z.array(z.string().max(1500)).max(60),
+    preferred: z.array(z.string().max(1500)).max(40),
+    skills: z.array(z.string().max(240)).max(80),
+    experience: z.array(z.string().max(1000)).max(30),
+    education: z.array(z.string().max(1000)).max(20),
+  }),
+  languages: z.array(z.object({
+    name: z.string().max(120),
+    level: z.string().max(120).nullable(),
+  })).max(30),
+  benefits: z.array(z.string().max(1000)).max(40),
+  cleanDescription: z.string().min(1).max(100_000),
+  sourceLanguage: z.string().max(80).nullable(),
+  warnings: z.array(z.string().max(500)).max(30),
+});
+
 export const jobSnapshotSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: z.literal(JOB_SCHEMA_VERSION).default(JOB_SCHEMA_VERSION),
   id: z.string().uuid().optional(),
   url: z.string().max(2000).default(""),
   title: z.string().max(240).default("Untitled role"),
@@ -108,6 +155,14 @@ export const jobSnapshotSchema = z.object({
   description: z.string().min(1).max(100_000),
   captureMethod: z.enum(["url", "paste", "extension"]),
   capturedAt: z.string().datetime().optional(),
+  structuredData: jobStructuredDataSchema.nullable().default(null),
+  parseStatus: z.enum(["pending", "completed", "failed"]).default("pending"),
+  parseWarnings: z.array(z.string().max(500)).default([]),
+  location: z.string().max(500).default(""),
+  datePosted: z.string().nullable().default(null),
+  employmentType: z.string().max(160).nullable().default(null),
+  seniority: z.string().max(160).nullable().default(null),
+  sourceLanguage: z.string().max(80).nullable().default(null),
 });
 
 export const cvTemplateIdSchema = z.enum(["clarity", "compact"]);
@@ -131,6 +186,7 @@ export type ProvenanceStatus = z.infer<typeof provenanceStatusSchema>;
 export type TailoredItemProvenance = z.infer<typeof provenanceSchema>;
 export type TextItem = z.infer<typeof textItemSchema>;
 export type BaseCV = z.infer<typeof baseCVSchema>;
+export type JobStructuredData = z.infer<typeof jobStructuredDataSchema>;
 export type JobSnapshot = z.infer<typeof jobSnapshotSchema>;
 export type TailoredCV = z.infer<typeof tailoredCVSchema>;
 export type QuotaState = z.infer<typeof quotaStateSchema>;

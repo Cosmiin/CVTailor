@@ -23,7 +23,7 @@ const readDemo = (): DemoStore => {
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
 const rowToJob = (row: any): JobRecord => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: row.id,
   url: row.url,
   title: row.title,
@@ -31,6 +31,14 @@ const rowToJob = (row: any): JobRecord => ({
   description: row.description,
   captureMethod: row.capture_method,
   capturedAt: row.created_at,
+  structuredData: row.structured_data ?? null,
+  parseStatus: row.parse_status ?? (row.structured_data ? "completed" : "pending"),
+  parseWarnings: row.parse_warnings ?? [],
+  location: row.location ?? row.structured_data?.location?.original ?? "",
+  datePosted: row.date_posted ?? row.structured_data?.datePosted ?? null,
+  employmentType: row.employment_type ?? row.structured_data?.employmentType ?? null,
+  seniority: row.seniority ?? row.structured_data?.seniority ?? null,
+  sourceLanguage: row.source_language ?? row.structured_data?.sourceLanguage ?? null,
   latestTailoredCV: row.latest_tailored_cv,
   templateId: row.template_id,
   createdAt: row.created_at,
@@ -76,9 +84,10 @@ export const dataApi = {
     if (!isSupabaseConfigured) {
       const now = new Date().toISOString();
       const job: JobRecord = {
-        schemaVersion: 1, id: crypto.randomUUID(), url: input.url ?? "", title: input.title || "Senior Product Operations Manager",
+        schemaVersion: 2, id: crypto.randomUUID(), url: input.url ?? "", title: input.title || "Senior Product Operations Manager",
         company: input.company || "Acme Systems", description: input.description || "Lead product operations, planning, experimentation and cross-functional delivery. Use data to improve customer outcomes.",
-        captureMethod: input.description ? "paste" : "url", capturedAt: now, latestTailoredCV: null, templateId: "clarity", createdAt: now, updatedAt: now,
+        captureMethod: input.description ? "paste" : "url", capturedAt: now, structuredData: null, parseStatus: "completed", parseWarnings: [], location: "", datePosted: null,
+        employmentType: null, seniority: null, sourceLanguage: null, latestTailoredCV: null, templateId: "clarity", createdAt: now, updatedAt: now,
       };
       const store = readDemo(); store.jobs.unshift(job); writeDemo(store); return job;
     }

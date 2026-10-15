@@ -24,6 +24,11 @@ Without Supabase environment values, the web app starts in an explicit local dem
 
 Run `pnpm build:extension`, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `apps/extension/dist`. Set the Supabase and app values in `apps/extension/.env.local` before building.
 
+On an explicit capture, the extension sends the visible listing and any `JobPosting` metadata to the
+authenticated `import-job` function. The function uses strict AI structured output to identify the
+primary role, company, location, compensation, responsibilities, requirements, languages, and
+benefits in the source language. Job parsing is separate from the monthly CV-tailoring quota.
+
 ## Deployment
 
 - Cloudflare Pages: build command `pnpm build:web`; output directory `apps/web/dist`.
