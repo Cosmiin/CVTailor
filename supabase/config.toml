@@ -18,8 +18,8 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173/**"]
+site_url = "https://cvtailor.pages.dev"
+additional_redirect_urls = ["http://localhost:5173/**", "https://cvtailor.pages.dev/**"]
 enable_signup = true
 
 [auth.email]
