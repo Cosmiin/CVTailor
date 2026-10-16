@@ -20,6 +20,13 @@ const longCV = tailoredCVSchema.parse({
   })),
 });
 
+const datedCV = tailoredCVSchema.parse({
+  ...demoCV,
+  jobId: "00000000-0000-4000-8000-000000000002",
+  generatedAt: "2026-10-16T12:00:00.000Z",
+  experience: [{ ...demoCV.experience[0], startDate: "2022-01", endDate: "2023-06" }],
+});
+
 describe("CV export renderers", () => {
   it("keeps the headline below the candidate name in the PDF header", async () => {
     const blob = await renderPDFBlob(longCV);
@@ -45,5 +52,20 @@ describe("CV export renderers", () => {
     const blob = await renderDOCXBlob(longCV);
     expect(blob.type).toContain("wordprocessingml.document");
     expect(blob.size).toBeGreaterThan(1_000);
+  }, 20_000);
+
+  it("includes each role tenure in PDF and DOCX exports", async () => {
+    const pdfBlob = await renderPDFBlob(datedCV);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdfDocument = await pdfjs.getDocument({ data: new Uint8Array(await pdfBlob.arrayBuffer()) }).promise;
+    const pdfContent = await (await pdfDocument.getPage(1)).getTextContent();
+    const pdfText = pdfContent.items.map((item) => "str" in item ? item.str : "").join(" ").replace(/\s+/g, " ");
+
+    const docxBlob = await renderDOCXBlob(datedCV);
+    const mammoth = await import("mammoth/mammoth.browser");
+    const docxText = (await mammoth.extractRawText({ arrayBuffer: await docxBlob.arrayBuffer() })).value.replace(/\s+/g, " ");
+
+    expect(pdfText).toContain("1 year 6 months");
+    expect(docxText).toContain("1 year 6 months");
   }, 20_000);
 });

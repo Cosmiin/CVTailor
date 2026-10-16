@@ -5,10 +5,12 @@ import { CVPreview } from "./CVPreview";
 
 describe("CVPreview", () => {
   it("renders the semantic CV sections in configured order", () => {
-    const html = renderToStaticMarkup(<CVPreview cv={demoCV} />);
+    const cv = { ...demoCV, experience: demoCV.experience.map((item, index) => index ? item : { ...item, startDate: "2022-01", endDate: "2023-06" }) };
+    const html = renderToStaticMarkup(<CVPreview cv={cv} />);
     expect(html).toContain("Alex Morgan");
     expect(html.indexOf("Profile")).toBeLessThan(html.indexOf("Experience"));
     expect(html).toContain("Product operations");
+    expect(html).toContain("1 year 6 months");
   });
 
   it("marks inferred content for review in the live preview", () => {

@@ -293,6 +293,8 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .resume-entry-heading h3 { margin: 0; font-size: 11px; }
 .resume-entry-heading p, .resume-entry-heading span { color: #66716f; font-size: 8.5px; }
 .resume-entry-heading span { white-space: nowrap; }
+.resume-entry-dates { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.resume-entry-dates small { color: #356c65; font-size: 7.5px; font-weight: 700; }
 .resume-paper ul { margin: 5px 0 0; padding-left: 16px; }
 .resume-paper li { padding-left: 3px; margin-top: 2px; }
 .resume-skills { display: flex; flex-wrap: wrap; gap: 5px; }

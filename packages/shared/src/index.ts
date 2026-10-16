@@ -388,6 +388,18 @@ export const calculateExperienceMonths = (cv: Pick<BaseCV, "experience">, now = 
   return worked.size;
 };
 
+export const calculateRoleExperienceMonths = (
+  experience: Pick<z.infer<typeof experienceSchema>, "startDate" | "endDate">,
+  now = new Date(),
+): number => {
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  const start = parseExperienceMonth(experience.startDate, "start");
+  const parsedEnd = parseExperienceMonth(experience.endDate, "end");
+  const end = isPresentExperienceDate(experience.endDate) ? currentMonth : parsedEnd;
+  if (start === null || end === null || start > currentMonth || end < start) return 0;
+  return Math.min(end, currentMonth) - start + 1;
+};
+
 export const formatExperienceDuration = (months: number): string => {
   if (months <= 0) return "";
   const years = Math.floor(months / 12);

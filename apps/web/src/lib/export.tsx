@@ -2,7 +2,7 @@ import React, { type ReactNode } from "react";
 import { Document as DocxDocument, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { Document, Image, Link, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
-  calculateExperienceMonths, exportableCV, formatExperienceDate, formatExperienceDuration,
+  calculateExperienceMonths, calculateRoleExperienceMonths, exportableCV, formatExperienceDate, formatExperienceDuration,
   type TailoredCV,
 } from "@cv-maker/shared";
 import { cropProfilePhoto } from "./photo";
@@ -37,6 +37,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 2 },
   bold: { fontFamily: "Helvetica-Bold" },
   muted: { color: "#5b6866", fontSize: 8.3 },
+  dateInfo: { alignItems: "flex-end" },
+  roleDuration: { color: "#356c65", fontSize: 7.4, fontFamily: "Helvetica-Bold" },
   bullet: { flexDirection: "row", marginTop: 2 },
   dot: { width: 10 },
   body: { flex: 1 },
@@ -50,7 +52,7 @@ const dateRange = (start: string, end: string) => [formatExperienceDate(start, "
 
 const PDFSection = ({ cv, sectionKey }: { cv: TailoredCV; sectionKey: string }): ReactNode => {
   if (sectionKey === "summary" && cv.summary.visible && cv.summary.text) return <View style={styles.section}><Text style={styles.heading}>Profile</Text><Text>{cv.summary.text}</Text></View>;
-  if (sectionKey === "experience" && cv.experience.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Experience</Text>{cv.experience.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry}><View style={styles.row} wrap={false}><View><Text style={styles.bold}>{item.role}</Text><Text style={styles.muted}>{item.company}{item.location ? ` · ${item.location}` : ""}</Text></View><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text></View>{item.bullets.filter((bullet) => bullet.visible && bullet.text).map((bullet) => <View style={styles.bullet} key={bullet.id}><Text style={styles.dot}>•</Text><Text style={styles.body}>{bullet.text}</Text></View>)}</View>)}</View>;
+  if (sectionKey === "experience" && cv.experience.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Experience</Text>{cv.experience.filter((item) => item.visible).map((item) => { const duration = formatExperienceDuration(calculateRoleExperienceMonths(item)); return <View key={item.id} style={styles.entry}><View style={styles.row} wrap={false}><View><Text style={styles.bold}>{item.role}</Text><Text style={styles.muted}>{item.company}{item.location ? ` · ${item.location}` : ""}</Text></View><View style={styles.dateInfo}><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text>{duration && <Text style={styles.roleDuration}>{duration}</Text>}</View></View>{item.bullets.filter((bullet) => bullet.visible && bullet.text).map((bullet) => <View style={styles.bullet} key={bullet.id}><Text style={styles.dot}>•</Text><Text style={styles.body}>{bullet.text}</Text></View>)}</View>; })}</View>;
   if (sectionKey === "skills" && cv.skills.some((item) => item.visible && item.text)) return <View style={styles.section}><Text style={styles.heading}>Core skills</Text><View style={styles.skills}>{cv.skills.filter((item) => item.visible && item.text).map((item) => <Text style={styles.skill} key={item.id}>{item.text}</Text>)}</View></View>;
   if (sectionKey === "education" && cv.education.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Education</Text>{cv.education.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry} wrap={false}><View style={styles.row}><View><Text style={styles.bold}>{item.qualification}</Text><Text style={styles.muted}>{item.institution}</Text></View><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text></View>{item.details && <Text>{item.details}</Text>}</View>)}</View>;
   if (sectionKey === "projects" && cv.projects.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Selected projects</Text>{cv.projects.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry} wrap={false}><Text style={styles.bold}>{item.name}</Text>{item.description && <Text>{item.description}</Text>}{item.link && <Link style={styles.link} src={item.link}>{item.link}</Link>}</View>)}</View>;
@@ -102,7 +104,8 @@ export const renderDOCXBlob = async (cv: TailoredCV) => {
     if (key === "experience" && clean.experience.some((item) => item.visible)) {
       children.push(heading("EXPERIENCE"));
       clean.experience.filter((item) => item.visible).forEach((item) => {
-        children.push(new Paragraph({ children: [new TextRun({ text: item.role, bold: true }), new TextRun({ text: ` · ${item.company}`, color: "426460" }), new TextRun({ text: `    ${dateRange(item.startDate, item.endDate)}`, color: "5B6866" })], spacing: { before: 100 } }));
+        const duration = formatExperienceDuration(calculateRoleExperienceMonths(item));
+        children.push(new Paragraph({ children: [new TextRun({ text: item.role, bold: true }), new TextRun({ text: ` · ${item.company}`, color: "426460" }), new TextRun({ text: `    ${dateRange(item.startDate, item.endDate)}${duration ? ` · ${duration}` : ""}`, color: "5B6866" })], spacing: { before: 100 } }));
         if (item.location) children.push(new Paragraph({ children: [new TextRun({ text: item.location, italics: true, color: "5B6866" })] }));
         item.bullets.filter((bullet) => bullet.visible && bullet.text).forEach((bullet) => children.push(new Paragraph({ text: bullet.text, bullet: { level: 0 } })));
       });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
+  calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
   exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
@@ -41,6 +41,8 @@ describe("shared CV rules", () => {
       ],
     };
     expect(calculateExperienceMonths(cv, new Date("2026-10-15"))).toBe(18);
+    expect(calculateRoleExperienceMonths(cv.experience[0], new Date("2026-10-15"))).toBe(12);
+    expect(calculateRoleExperienceMonths({ startDate: "2022-12", endDate: "Present" }, new Date("2026-10-15"))).toBe(47);
     expect(formatExperienceDuration(18)).toBe("1 year 6 months");
     expect(formatExperienceDate("2022-07")).toBe("Jul 2022");
   });
