@@ -21,6 +21,20 @@ const longCV = tailoredCVSchema.parse({
 });
 
 describe("CV export renderers", () => {
+  it("keeps the headline below the candidate name in the PDF header", async () => {
+    const blob = await renderPDFBlob(longCV);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const document = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const content = await (await document.getPage(1)).getTextContent();
+    const items = content.items.filter((item): item is typeof item & { str: string; transform: number[] } => "str" in item && "transform" in item);
+    const name = items.find((item) => item.str === longCV.contact.fullName);
+    const headline = items.find((item) => item.str === longCV.contact.headline);
+
+    expect(name).toBeDefined();
+    expect(headline).toBeDefined();
+    expect((name?.transform[5] ?? 0) - (headline?.transform[5] ?? 0)).toBeGreaterThanOrEqual(16);
+  }, 20_000);
+
   it("renders long experience content to PDF without stalling", async () => {
     const blob = await renderPDFBlob(longCV);
     expect(blob.type).toBe("application/pdf");

@@ -25,7 +25,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 22 },
   identity: { flexGrow: 1, flexShrink: 1 },
   photo: { width: 74, height: 74, objectFit: "cover", borderRadius: 6 },
-  name: { fontFamily: "Helvetica-Bold", fontSize: 25, color: "#163f3b", marginBottom: 3 },
+  nameBlock: { minHeight: 31, paddingBottom: 3 },
+  name: { fontFamily: "Helvetica-Bold", fontSize: 25, color: "#163f3b" },
   headline: { fontSize: 11, color: "#426460", marginBottom: 8 },
   contact: { flexDirection: "row", flexWrap: "wrap", gap: 8, color: "#4c5856", fontSize: 8 },
   experienceTotal: { marginTop: 6, color: "#356c65", fontSize: 8, fontFamily: "Helvetica-Bold" },
@@ -65,7 +66,7 @@ const PDFResume = ({ cv }: { cv: TailoredCV }) => {
   const contact = [clean.contact.email, clean.contact.phone, clean.contact.location, clean.contact.linkedin, clean.contact.website].filter(Boolean);
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
   return <Document title={`${clean.contact.fullName} CV`} author={clean.contact.fullName}><Page size="A4" style={[styles.page, clean.templateId === "compact" ? styles.compact : {}]}>
-    <View style={styles.header}><View style={styles.identity}><Text style={styles.name}>{clean.contact.fullName}</Text>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}<View style={styles.contact}>{contact.map((item) => <Text key={item}>{item}</Text>)}</View>{totalExperience && <Text style={styles.experienceTotal}>{totalExperience} total experience</Text>}</View>{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}</View>
+    <View style={styles.header}><View style={styles.identity}><View style={styles.nameBlock}><Text style={styles.name}>{clean.contact.fullName}</Text></View>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}<View style={styles.contact}>{contact.map((item) => <Text key={item}>{item}</Text>)}</View>{totalExperience && <Text style={styles.experienceTotal}>{totalExperience} total experience</Text>}</View>{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}</View>
     <View style={styles.rule} />
     {clean.sectionOrder.map((key) => <PDFSection key={key} cv={clean} sectionKey={key} />)}
   </Page></Document>;
