@@ -275,7 +275,8 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .resume-paper.compact { min-height: 760px; padding: 38px 42px; font-size: 9.4px; line-height: 1.4; }
 .resume-header { margin-bottom: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
 .resume-identity { min-width: 0; flex: 1; }
-.resume-photo { width: 86px; height: 86px; flex: 0 0 86px; object-fit: cover; border-radius: 8px; box-shadow: 0 0 0 1px #d2dcd8; }
+.resume-photo { width: 86px; height: 86px; flex: 0 0 86px; overflow: hidden; border-radius: 8px; box-shadow: 0 0 0 1px #d2dcd8; }
+.resume-photo img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .resume-paper.compact .resume-photo { width: 70px; height: 70px; flex-basis: 70px; border-radius: 50%; }
 .resume-rule { width: 42px; height: 3px; margin: 19px 0 4px; background: var(--green); }
 .resume-paper.compact .resume-rule { width: 100%; height: 1px; margin-top: 14px; background: #9fb8b2; }
@@ -327,10 +328,14 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .photo-editor-preview img { width: 100%; height: 100%; object-fit: cover; user-select: none; }
 .photo-editor-preview.is-positionable { cursor: grab; touch-action: none; box-shadow: inset 0 0 0 2px rgba(255,255,255,.75); }
 .photo-editor-preview.is-positionable:active { cursor: grabbing; }
+.photo-editor-preview.is-positionable:focus-visible { outline: 3px solid rgba(44,108,99,.35); outline-offset: 2px; }
+.photo-editor-preview.is-positionable img { will-change: transform, object-position; pointer-events: none; }
 .photo-editor-preview.is-positionable > span { padding: 4px 7px; position: absolute; inset: auto auto 7px; border-radius: 10px; color: #fff; background: rgba(18,43,40,.72); pointer-events: none; font-size: 8px; font-weight: 750; }
 .photo-editor-preview svg { width: 30px; height: 30px; }
 .photo-editor strong { display: block; font-size: 12px; }
 .photo-editor p { margin: 3px 0 10px; color: var(--muted); font-size: 10px; }
+.photo-zoom { max-width: 260px; margin: -2px 0 10px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; color: var(--muted); font-size: 9px; font-weight: 700; }
+.photo-zoom input { min-height: auto; padding: 0; accent-color: var(--green-2); }
 .inline-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .repeat-list { display: grid; gap: 12px; }
 .repeat-card { padding: 13px; border: 1px solid #e0e1dc; border-radius: 8px; background: #f9f9f5; }

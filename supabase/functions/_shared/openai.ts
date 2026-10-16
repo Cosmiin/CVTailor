@@ -3,7 +3,7 @@ export const runStructuredResponse = async (
   schema: Record<string, unknown>,
   instructions: string,
   input: string,
-  options: { modelEnv?: string } = {},
+  options: { modelEnv?: string; timeoutMs?: number } = {},
 ) => {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("openai_not_configured");
@@ -13,7 +13,7 @@ export const runStructuredResponse = async (
     response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 60_000),
       body: JSON.stringify({
         model,
         instructions,

@@ -23,7 +23,7 @@ export function CVPreview({ cv, templateId = "clarity" }: { cv: BaseCV; template
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(cv));
 
   return <article className={`resume-paper ${templateId}`} aria-label="CV preview">
-    <header className="resume-header"><div className="resume-identity"><h1>{cv.contact.fullName || "Your name"}</h1><p className="resume-headline">{cv.contact.headline || "Professional headline"}</p><div className="resume-contact">{contact.map((item) => <span key={item}>{item}</span>)}</div>{totalExperience && <p className="resume-experience-total">{totalExperience} total experience</p>}</div>{cv.photo?.visible && <img className="resume-photo" src={cv.photo.dataUrl} style={{ objectPosition: `${cv.photo.positionX ?? 50}% ${cv.photo.positionY ?? 50}%` }} alt={`${cv.contact.fullName || "Candidate"} profile`} />}</header>
+    <header className="resume-header"><div className="resume-identity"><h1>{cv.contact.fullName || "Your name"}</h1><p className="resume-headline">{cv.contact.headline || "Professional headline"}</p><div className="resume-contact">{contact.map((item) => <span key={item}>{item}</span>)}</div>{totalExperience && <p className="resume-experience-total">{totalExperience} total experience</p>}</div>{cv.photo?.visible && <span className="resume-photo"><img src={cv.photo.dataUrl} style={{ objectPosition: `${cv.photo.positionX ?? 50}% ${cv.photo.positionY ?? 50}%`, transform: `scale(${cv.photo.zoom ?? 1.15})`, transformOrigin: `${cv.photo.positionX ?? 50}% ${cv.photo.positionY ?? 50}%` }} alt={`${cv.contact.fullName || "Candidate"} profile`} /></span>}</header>
     <div className="resume-rule" />
     {cv.sectionOrder.map((key) => <div key={key}>{sections[key]}</div>)}
   </article>;

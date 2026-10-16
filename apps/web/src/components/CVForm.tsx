@@ -25,28 +25,48 @@ const clampPosition = (value: number) => Math.max(0, Math.min(100, value));
 
 function PhotoPositioner({ cv, onChange }: Props) {
   const drag = useRef<{ clientX: number; clientY: number; positionX: number; positionY: number } | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   if (!cv.photo) return <div className="photo-editor-preview"><UserRound /></div>;
   const positionX = cv.photo.positionX ?? 50;
   const positionY = cv.photo.positionY ?? 50;
+  const zoom = cv.photo.zoom ?? 1.15;
   const update = (event: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const nextX = clampPosition(drag.current.positionX - (event.clientX - drag.current.clientX) / bounds.width * 100);
-    const nextY = clampPosition(drag.current.positionY - (event.clientY - drag.current.clientY) / bounds.height * 100);
+    const image = imageRef.current;
+    const coverScale = image?.naturalWidth && image?.naturalHeight
+      ? Math.max(bounds.width / image.naturalWidth, bounds.height / image.naturalHeight)
+      : 1;
+    const overflowX = Math.max((image?.naturalWidth ?? bounds.width) * coverScale * zoom - bounds.width, 1);
+    const overflowY = Math.max((image?.naturalHeight ?? bounds.height) * coverScale * zoom - bounds.height, 1);
+    const nextX = clampPosition(drag.current.positionX - (event.clientX - drag.current.clientX) / overflowX * 100);
+    const nextY = clampPosition(drag.current.positionY - (event.clientY - drag.current.clientY) / overflowY * 100);
     onChange({ ...cv, photo: { ...cv.photo!, positionX: nextX, positionY: nextY } });
   };
+  const nudge = (x: number, y: number) => onChange({
+    ...cv,
+    photo: { ...cv.photo!, positionX: clampPosition(positionX + x), positionY: clampPosition(positionY + y) },
+  });
   return <div
     className={`photo-editor-preview is-positionable ${cv.photo.visible ? "" : "muted"}`}
     role="application"
+    tabIndex={0}
     aria-label="Drag the profile photo to position the face"
     onPointerDown={(event) => {
+      event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       drag.current = { clientX: event.clientX, clientY: event.clientY, positionX, positionY };
     }}
     onPointerMove={update}
-    onPointerUp={(event) => { event.currentTarget.releasePointerCapture(event.pointerId); drag.current = null; }}
+    onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); drag.current = null; }}
     onPointerCancel={() => { drag.current = null; }}
-  ><img src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={{ objectPosition: `${positionX}% ${positionY}%` }} /><span>Drag to center</span></div>;
+    onKeyDown={(event) => {
+      const direction = event.key === "ArrowLeft" ? [3, 0] : event.key === "ArrowRight" ? [-3, 0]
+        : event.key === "ArrowUp" ? [0, 3] : event.key === "ArrowDown" ? [0, -3] : null;
+      if (!direction) return;
+      event.preventDefault(); nudge(direction[0], direction[1]);
+    }}
+  ><img ref={imageRef} src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={{ objectPosition: `${positionX}% ${positionY}%`, transform: `scale(${zoom})`, transformOrigin: `${positionX}% ${positionY}%` }} /><span>Drag to center</span></div>;
 }
 
 export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpenInterview, onConfirmContext, onDeleteContext }: Props) {
@@ -60,7 +80,7 @@ export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpe
   const setPhoto = async (file?: File) => {
     if (!file) return;
     const dataUrl = await prepareProfilePhoto(file);
-    onChange({ ...cv, photo: { dataUrl, fileName: file.name, visible: true, positionX: 50, positionY: 50 } });
+    onChange({ ...cv, photo: { dataUrl, fileName: file.name, visible: true, positionX: 50, positionY: 50, zoom: 1.15 } });
   };
   const sectionLabel = (key: string) => cv.customSections.find((item) => item.id === key)?.title || key;
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(cv));
@@ -69,7 +89,7 @@ export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpe
     <details open><summary><span><UserRound size={17} />Identity & contact</span><ChevronRight /></summary><div className="details-body">
       <div className="photo-editor">
         <PhotoPositioner cv={cv} onChange={onChange} baseMode={baseMode} />
-        <div><strong>Profile photo</strong><p>{cv.photo ? "Drag the photo to center your face. The same position is used for square and circular CV photos." : "Add a profile photo to reuse it in every tailored CV."}</p><div className="inline-actions"><label className="button button-small button-ghost file-button"><Camera size={14} />{cv.photo ? "Replace" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0]).catch((error) => alert(error.message))} /></label>{cv.photo && <><button className="button button-small button-ghost" onClick={() => onChange({ ...cv, photo: { ...cv.photo!, visible: !cv.photo!.visible } })}>{cv.photo.visible ? "Hide on CV" : "Show on CV"}</button><button className="icon-button danger" aria-label="Remove photo" onClick={() => onChange({ ...cv, photo: null })}><Trash2 size={15} /></button></>}</div></div>
+        <div><strong>Profile photo</strong><p>{cv.photo ? "Drag the photo to center your face. The same position is used for square and circular CV photos." : "Add a profile photo to reuse it in every tailored CV."}</p>{cv.photo && <label className="photo-zoom"><span>Zoom</span><input type="range" min="1" max="3" step="0.05" value={cv.photo.zoom ?? 1.15} onChange={(event) => onChange({ ...cv, photo: { ...cv.photo!, zoom: Number(event.target.value) } })} /></label>}<div className="inline-actions"><label className="button button-small button-ghost file-button"><Camera size={14} />{cv.photo ? "Replace" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPhoto(event.target.files?.[0]).catch((error) => alert(error.message))} /></label>{cv.photo && <><button className="button button-small button-ghost" onClick={() => onChange({ ...cv, photo: { ...cv.photo!, visible: !cv.photo!.visible } })}>{cv.photo.visible ? "Hide on CV" : "Show on CV"}</button><button className="icon-button danger" aria-label="Remove photo" onClick={() => onChange({ ...cv, photo: null })}><Trash2 size={15} /></button></>}</div></div>
       </div>
       <div className="form-grid contact-grid"><label>Full name<input value={cv.contact.fullName} onChange={(event) => updateContact("fullName", event.target.value)} /></label><label>Professional headline<input value={cv.contact.headline} onChange={(event) => updateContact("headline", event.target.value)} /></label><label>Email<input type="email" value={cv.contact.email} onChange={(event) => updateContact("email", event.target.value)} /></label><label>Phone<input value={cv.contact.phone} onChange={(event) => updateContact("phone", event.target.value)} /></label><label>Location<input value={cv.contact.location} onChange={(event) => updateContact("location", event.target.value)} /></label><label>LinkedIn<input value={cv.contact.linkedin} onChange={(event) => updateContact("linkedin", event.target.value)} /></label><label className="full-span">Website or portfolio<input value={cv.contact.website} onChange={(event) => updateContact("website", event.target.value)} /></label></div>
     </div></details>

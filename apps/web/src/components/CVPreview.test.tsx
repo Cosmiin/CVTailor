@@ -20,11 +20,12 @@ describe("CVPreview", () => {
   });
 
   it("renders the reusable profile photo when enabled", () => {
-    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true, positionX: 25, positionY: 70 } };
+    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true, positionX: 25, positionY: 70, zoom: 1.3 } };
     const html = renderToStaticMarkup(<CVPreview cv={cv} />);
     expect(html).toContain("resume-photo");
     expect(html).toContain("Alex Morgan profile");
     expect(html).toContain("object-position:25% 70%");
+    expect(html).toContain("scale(1.3)");
     expect(html).toContain("total experience");
   });
 });

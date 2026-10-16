@@ -9,8 +9,14 @@ import { cropProfilePhoto } from "./photo";
 
 const saveBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a"); anchor.href = url; anchor.download = fileName; anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 };
 
 const styles = StyleSheet.create({
@@ -43,7 +49,7 @@ const dateRange = (start: string, end: string) => [formatExperienceDate(start, "
 
 const PDFSection = ({ cv, sectionKey }: { cv: TailoredCV; sectionKey: string }): ReactNode => {
   if (sectionKey === "summary" && cv.summary.visible && cv.summary.text) return <View style={styles.section}><Text style={styles.heading}>Profile</Text><Text>{cv.summary.text}</Text></View>;
-  if (sectionKey === "experience" && cv.experience.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Experience</Text>{cv.experience.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry} wrap={false}><View style={styles.row}><View><Text style={styles.bold}>{item.role}</Text><Text style={styles.muted}>{item.company}{item.location ? ` · ${item.location}` : ""}</Text></View><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text></View>{item.bullets.filter((bullet) => bullet.visible && bullet.text).map((bullet) => <View style={styles.bullet} key={bullet.id}><Text style={styles.dot}>•</Text><Text style={styles.body}>{bullet.text}</Text></View>)}</View>)}</View>;
+  if (sectionKey === "experience" && cv.experience.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Experience</Text>{cv.experience.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry}><View style={styles.row} wrap={false}><View><Text style={styles.bold}>{item.role}</Text><Text style={styles.muted}>{item.company}{item.location ? ` · ${item.location}` : ""}</Text></View><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text></View>{item.bullets.filter((bullet) => bullet.visible && bullet.text).map((bullet) => <View style={styles.bullet} key={bullet.id}><Text style={styles.dot}>•</Text><Text style={styles.body}>{bullet.text}</Text></View>)}</View>)}</View>;
   if (sectionKey === "skills" && cv.skills.some((item) => item.visible && item.text)) return <View style={styles.section}><Text style={styles.heading}>Core skills</Text><View style={styles.skills}>{cv.skills.filter((item) => item.visible && item.text).map((item) => <Text style={styles.skill} key={item.id}>{item.text}</Text>)}</View></View>;
   if (sectionKey === "education" && cv.education.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Education</Text>{cv.education.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry} wrap={false}><View style={styles.row}><View><Text style={styles.bold}>{item.qualification}</Text><Text style={styles.muted}>{item.institution}</Text></View><Text style={styles.muted}>{dateRange(item.startDate, item.endDate)}</Text></View>{item.details && <Text>{item.details}</Text>}</View>)}</View>;
   if (sectionKey === "projects" && cv.projects.some((item) => item.visible)) return <View style={styles.section}><Text style={styles.heading}>Selected projects</Text>{cv.projects.filter((item) => item.visible).map((item) => <View key={item.id} style={styles.entry} wrap={false}><Text style={styles.bold}>{item.name}</Text>{item.description && <Text>{item.description}</Text>}{item.link && <Link style={styles.link} src={item.link}>{item.link}</Link>}</View>)}</View>;
@@ -69,14 +75,16 @@ const withCroppedPhoto = async (cv: TailoredCV): Promise<TailoredCV> => cv.photo
   ? { ...cv, photo: { ...cv.photo, dataUrl: await cropProfilePhoto(cv.photo) } }
   : cv;
 
-export const exportPDF = async (cv: TailoredCV) => saveBlob(await pdf(<PDFResume cv={await withCroppedPhoto(cv)} />).toBlob(), `${cv.contact.fullName || "CV"}.pdf`);
+export const renderPDFBlob = async (cv: TailoredCV) => pdf(<PDFResume cv={await withCroppedPhoto(cv)} />).toBlob();
+
+export const exportPDF = async (cv: TailoredCV) => saveBlob(await renderPDFBlob(cv), `${cv.contact.fullName || "CV"}.pdf`);
 
 const dataUrlBytes = (dataUrl: string) => {
   const encoded = dataUrl.split(",")[1] ?? "";
   return Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
 };
 
-export const exportDOCX = async (cv: TailoredCV) => {
+export const renderDOCXBlob = async (cv: TailoredCV) => {
   const clean = exportableCV(await withCroppedPhoto(cv));
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
   const heading = (text: string) => new Paragraph({ text, heading: HeadingLevel.HEADING_2, spacing: { before: 220, after: 80 }, border: { bottom: { color: "AAC0BC", size: 4, style: "single", space: 4 } } });
@@ -114,5 +122,7 @@ export const exportDOCX = async (cv: TailoredCV) => {
   };
   clean.sectionOrder.forEach(addSection);
   const document = new DocxDocument({ styles: { paragraphStyles: [{ id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { bold: true, color: "163F3B", size: 18, characterSpacing: 18 }, paragraph: { spacing: { before: 220, after: 80 } } }] }, sections: [{ properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, children }] });
-  saveBlob(await Packer.toBlob(document), `${clean.contact.fullName || "CV"}.docx`);
+  return Packer.toBlob(document);
 };
+
+export const exportDOCX = async (cv: TailoredCV) => saveBlob(await renderDOCXBlob(cv), `${cv.contact.fullName || "CV"}.docx`);

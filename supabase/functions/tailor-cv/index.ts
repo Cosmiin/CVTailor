@@ -15,6 +15,38 @@ const experienceFingerprint = (experience: any) => {
   for (let index = 0; index < source.length; index++) { hash ^= source.charCodeAt(index); hash = Math.imul(hash, 16777619); }
   return `v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 };
+const compactText = (value: unknown, limit: number) => normalize(String(value ?? ""), limit);
+const compactList = (value: unknown, maxItems: number, itemLimit: number) =>
+  (Array.isArray(value) ? value : []).slice(0, maxItems).map((item) => compactText(item, itemLimit)).filter(Boolean);
+const compactContext = (experienceId: string, role: any, context: any) => ({
+  experienceId,
+  role: compactText(role?.role, 160),
+  company: compactText(role?.company, 160),
+  overview: compactText(context?.overview, 600),
+  responsibilities: compactList(context?.responsibilities, 4, 240),
+  methods: compactList(context?.methods, 3, 220),
+  tools: compactList(context?.tools, 4, 180),
+  scope: compactList(context?.scope, 3, 220),
+  domains: compactList(context?.domains, 3, 220),
+  outcomes: compactList(context?.outcomes, 4, 240),
+  skills: (Array.isArray(context?.skills) ? context.skills : []).slice(0, 6).map((skill: any) => ({
+    name: compactText(skill?.name, 80),
+    evidence: compactText(skill?.evidence, 180),
+  })).filter((skill: any) => skill.name),
+});
+const compactContexts = (activeContexts: any[], roleById: Map<string, any>) => {
+  const byId = new Map(activeContexts.map((item: any) => [String(item.experience_id), item]));
+  const ordered = [...roleById.keys()].map((id) => byId.get(id)).filter(Boolean);
+  const result: any[] = [];
+  let size = 2;
+  for (const item of ordered) {
+    const compact = compactContext(item.experience_id, roleById.get(item.experience_id), item.active_payload.context);
+    const nextSize = JSON.stringify(compact).length + 1;
+    if (result.length && size + nextSize > 32_000) continue;
+    result.push(compact); size += nextSize;
+  }
+  return result;
+};
 
 const tailoringInstructions = `You are an expert CV strategist and ATS-focused resume writer. Tailor the candidate's base CV to the supplied job while preserving truth, demonstrated seniority, and professional credibility.
 
@@ -68,7 +100,7 @@ Deno.serve(async (request) => {
     const staleExperienceIds = activeContexts.filter((item: any) => experienceFingerprint(roleById.get(item.experience_id)) !== item.active_payload.sourceFingerprint)
       .map((item: any) => item.experience_id);
     if (staleExperienceIds.length) return json(request, { error: "stale_experience_contexts", experienceIds: staleExperienceIds }, 409);
-    const approvedContexts = activeContexts.map((item: any) => ({ experienceId: item.experience_id, ...item.active_payload.context }));
+    const approvedContexts = compactContexts(activeContexts, roleById);
 
     const { data: reservation, error: reserveError } = await client.rpc("reserve_tailor_run", {
       target_job_id: jobId, request_key: idempotencyKey,
@@ -81,12 +113,21 @@ Deno.serve(async (request) => {
     runId = reservation.runId;
     if (reservation.status === "completed" && job.latest_tailored_cv) return json(request, { cv: job.latest_tailored_cv, reused: true });
 
-    const { photo: _privatePhoto, ...aiSafeCV } = base.document;
+    const { photo: _privatePhoto, ...cvWithoutPhoto } = base.document;
+    const aiSafeCV = {
+      ...cvWithoutPhoto,
+      contact: { fullName: "", headline: base.document.contact?.headline ?? "", email: "", phone: "", location: "", website: "", linkedin: "" },
+    };
+    const structuredJob = {
+      ...job.structured_data,
+      cleanDescription: compactText(job.structured_data?.cleanDescription, 12_000),
+    };
     const result = await runStructuredResponse(
       "tailored_cv",
       tailoredJsonSchema,
       tailoringInstructions,
-      `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<job_id>${jobId}</job_id>\n<structured_job_json>\n${JSON.stringify(job.structured_data ?? null)}\n</structured_job_json>\n<captured_job_text>\n${job.description}\n</captured_job_text>`,
+      `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<job_id>${jobId}</job_id>\n<structured_job_json>\n${JSON.stringify(structuredJob)}\n</structured_job_json>`,
+      { timeoutMs: 110_000 },
     );
     const generatedSkills = Array.isArray((result.value as any)?.skills) ? (result.value as any).skills : [];
     if (generatedSkills.length > 10 || generatedSkills.some((skill: any) => String(skill.text ?? "").trim().split(/\s+/).length > 3)) {
@@ -110,7 +151,9 @@ Deno.serve(async (request) => {
     return json(request, { cv: parsed });
   } catch (error) {
     const code = error instanceof Error ? error.message : "tailoring_failed";
-    if (runId && client) await client.rpc("fail_tailor_run", { run_id: runId, failure_code: code }).catch(() => undefined);
+    if (runId && client) {
+      try { await client.rpc("fail_tailor_run", { run_id: runId, failure_code: code }); } catch { /* Preserve the original failure response. */ }
+    }
     return json(request, { error: code }, code === "authentication_required" ? 401 : 500);
   }
 });

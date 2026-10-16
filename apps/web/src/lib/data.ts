@@ -26,9 +26,15 @@ const readDemo = (): DemoStore => {
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
 const functionErrorMessage = async (error: unknown, data: any, fallback: string) => {
-  const friendly = (code: string) => code === "stale_experience_contexts"
-    ? "Role context needs confirmation in Base CV before tailoring."
-    : code;
+  const friendly = (code: string) => ({
+    stale_experience_contexts: "Role context needs confirmation in Base CV before tailoring.",
+    openai_timeout: "Tailoring took too long to complete. Please try again.",
+    openai_request_failed: "The AI service could not be reached. Please try again.",
+    tailored_cv_skill_rules_failed: "AI could not produce valid short skills. Please try again.",
+    quota_exhausted: "You have used all tailoring runs available this month.",
+    account_disabled: "This account is currently disabled.",
+    "Failed to send a request to the Edge Function": "The tailoring service was interrupted. Please try again.",
+  }[code] ?? code.replaceAll("_", " "));
   if (data?.error) return friendly(String(data.error));
   const response = (error as { context?: Response } | null)?.context;
   if (response && typeof response.clone === "function") {
@@ -101,6 +107,7 @@ export const dataApi = {
         ...document.photo,
         positionX: document.photo.positionX ?? 50,
         positionY: document.photo.positionY ?? 50,
+        zoom: document.photo.zoom ?? 1.15,
       } : null,
     };
   },
@@ -259,9 +266,10 @@ export const dataApi = {
       store.jobs[index] = { ...store.jobs[index], latestTailoredCV: cv, templateId, updatedAt: new Date().toISOString() };
       writeDemo(store); await new Promise((resolve) => setTimeout(resolve, 900)); return cv;
     }
+    const idempotencyKey = crypto.randomUUID();
     const { data, error } = await supabase!.functions.invoke("tailor-cv", {
-      body: { jobId: job.id, templateId, idempotencyKey: crypto.randomUUID() },
-      headers: { "idempotency-key": crypto.randomUUID() },
+      body: { jobId: job.id, templateId, idempotencyKey },
+      headers: { "idempotency-key": idempotencyKey },
     });
     if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
     return tailoredCVSchema.parse(data.cv);

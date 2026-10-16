@@ -4,6 +4,22 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_STORED_DIMENSION = 900;
 const OUTPUT_SIZE = 560;
 
+export const squareCropGeometry = (
+  width: number,
+  height: number,
+  positionX = 50,
+  positionY = 50,
+  zoom = 1.15,
+) => {
+  const safeZoom = Math.max(1, Math.min(3, zoom));
+  const size = Math.min(width, height) / safeZoom;
+  return {
+    sourceX: Math.max(0, width - size) * (Math.max(0, Math.min(100, positionX)) / 100),
+    sourceY: Math.max(0, height - size) * (Math.max(0, Math.min(100, positionY)) / 100),
+    size,
+  };
+};
+
 const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image();
   image.onload = () => resolve(image);
@@ -42,12 +58,16 @@ export const prepareProfilePhoto = async (file: File): Promise<string> => {
 
 export const cropProfilePhoto = async (photo: NonNullable<BaseCV["photo"]>): Promise<string> => {
   const image = await loadImage(photo.dataUrl);
-  const side = Math.min(image.naturalWidth, image.naturalHeight);
-  const sourceX = (image.naturalWidth - side) * ((photo.positionX ?? 50) / 100);
-  const sourceY = (image.naturalHeight - side) * ((photo.positionY ?? 50) / 100);
+  const { sourceX, sourceY, size } = squareCropGeometry(
+    image.naturalWidth,
+    image.naturalHeight,
+    photo.positionX,
+    photo.positionY,
+    photo.zoom,
+  );
   const { canvas, context } = canvasContext(OUTPUT_SIZE, OUTPUT_SIZE);
   context.fillStyle = "#f4f3ee";
   context.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-  context.drawImage(image, sourceX, sourceY, side, side, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+  context.drawImage(image, sourceX, sourceY, size, size, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
   return canvas.toDataURL("image/jpeg", 0.9);
 };

@@ -27,7 +27,7 @@ describe("shared CV rules", () => {
   });
 
   it("preserves a user photo without treating it as an inferred claim", () => {
-    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true, positionX: 35, positionY: 60 } };
+    const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true, positionX: 35, positionY: 60, zoom: 1.25 } };
     expect(exportableCV(cv).photo?.dataUrl).toBe(cv.photo.dataUrl);
     expect(hasUnconfirmedClaims(cv)).toBe(false);
   });

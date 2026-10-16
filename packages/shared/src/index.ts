@@ -43,6 +43,7 @@ export const profilePhotoSchema = z.object({
   visible: z.boolean().default(true),
   positionX: z.number().min(0).max(100).default(50),
   positionY: z.number().min(0).max(100).default(50),
+  zoom: z.number().min(1).max(3).default(1.15),
 });
 
 export const experienceSchema = z.object({
