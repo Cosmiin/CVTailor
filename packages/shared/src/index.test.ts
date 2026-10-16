@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateExperienceMonths, demoCV, experienceContextSchema, experienceFingerprint, experienceInterviewDraftSchema,
+  calculateExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
   exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
@@ -85,6 +85,17 @@ describe("shared CV rules", () => {
     expect(experienceContextSchema.safeParse({
       schemaVersion: 1, overview: "Led a product operations function.", responsibilities: [], methods: [], tools: [], scope: [], domains: [], outcomes: [],
       skills: Array.from({ length: 5 }, (_, index) => ({ id: `s${index}`, name: index ? `Skill ${index}` : "Agentic Development", evidence: "Confirmed in the interview.", sourceQuestionIds: ["q1"] })),
+    }).success).toBe(true);
+  });
+
+  it("accepts Supabase timestamps with UTC offsets for enrichment records", () => {
+    expect(experienceEnrichmentSchema.safeParse({
+      experienceId: "experience-1",
+      active: null,
+      draft: null,
+      pending: null,
+      createdAt: "2026-10-16T10:28:00+00:00",
+      updatedAt: "2026-10-16T12:35:42.123456+00:00",
     }).success).toBe(true);
   });
 

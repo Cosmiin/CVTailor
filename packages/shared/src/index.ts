@@ -4,6 +4,10 @@ export const SCHEMA_VERSION = 1 as const;
 export const JOB_SCHEMA_VERSION = 2 as const;
 export const EXPERIENCE_ENRICHMENT_SCHEMA_VERSION = 1 as const;
 
+// Postgres/Supabase timestamps use explicit offsets (for example `+00:00`).
+// Accept those as well as the `Z` form produced by Date#toISOString.
+const enrichmentTimestampSchema = z.string().datetime({ offset: true });
+
 export const provenanceStatusSchema = z.enum([
   "verified",
   "inferred_unconfirmed",
@@ -77,8 +81,8 @@ export const experienceInterviewDraftSchema = z.object({
   questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
   answers: z.array(experienceInterviewAnswerSchema).max(10).default([]),
   currentIndex: z.number().int().min(0).max(9).default(0),
-  startedAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  startedAt: enrichmentTimestampSchema,
+  updatedAt: enrichmentTimestampSchema,
 });
 
 const contextList = z.array(z.string().min(1).max(500)).max(12).default([]);
@@ -107,7 +111,7 @@ export const approvedExperienceContextSchema = z.object({
   context: experienceContextSchema,
   questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
   answers: z.array(experienceInterviewAnswerSchema).min(5).max(10),
-  approvedAt: z.string().datetime(),
+  approvedAt: enrichmentTimestampSchema,
 });
 
 export const experienceEnrichmentSchema = z.object({
@@ -115,8 +119,8 @@ export const experienceEnrichmentSchema = z.object({
   active: approvedExperienceContextSchema.nullable().default(null),
   draft: experienceInterviewDraftSchema.nullable().default(null),
   pending: experienceContextSchema.nullable().default(null),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  createdAt: enrichmentTimestampSchema,
+  updatedAt: enrichmentTimestampSchema,
 });
 
 export const educationSchema = z.object({

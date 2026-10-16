@@ -263,14 +263,16 @@ export const experienceInterviewAnswerSchema = z.object({
   note: z.string().max(1500),
 });
 
+const enrichmentTimestampSchema = z.string().datetime({ offset: true });
+
 export const experienceInterviewDraftSchema = z.object({
   schemaVersion: z.literal(1),
   sourceFingerprint: z.string().min(1).max(80),
   questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
   answers: z.array(experienceInterviewAnswerSchema).max(10),
   currentIndex: z.number().int().min(0).max(9),
-  startedAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
+  startedAt: enrichmentTimestampSchema,
+  updatedAt: enrichmentTimestampSchema,
 });
 
 const experienceContextList = z.array(z.string().min(1).max(500)).max(12);
