@@ -1,5 +1,9 @@
 import React, { type ReactNode } from "react";
-import { AlignmentType, Document as DocxDocument, Header, HeadingLevel, ImageRun, PageNumber, Packer, Paragraph, TextRun } from "docx";
+import {
+  AlignmentType, Document as DocxDocument, Header, HeadingLevel, HorizontalPositionAlign,
+  HorizontalPositionRelativeFrom, ImageRun, PageNumber, Packer, Paragraph, TextRun,
+  TextWrappingSide, TextWrappingType, VerticalPositionRelativeFrom,
+} from "docx";
 import { Document, Image, Link, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 import {
   calculateExperienceMonths, calculateRoleExperienceMonths, exportableCV, formatExperienceDate, formatExperienceDuration,
@@ -22,16 +26,19 @@ const saveBlob = (blob: Blob, fileName: string) => {
 const styles = StyleSheet.create({
   page: { padding: 42, fontFamily: "Helvetica", color: "#1f2927", fontSize: 9.5, lineHeight: 1.45 },
   compact: { padding: 32, paddingTop: 38, fontSize: 8.8, lineHeight: 1.36 },
-  header: { flexDirection: "column" },
+  header: { position: "relative" },
   identity: { flexGrow: 1 },
-  photo: { width: 62, height: 62, objectFit: "cover", borderRadius: 6, marginTop: 4, marginBottom: 7 },
-  nameBlock: { minHeight: 31, paddingBottom: 3 },
+  identityWithPhoto: { minHeight: 58, paddingRight: 68 },
+  photo: { position: "absolute", top: 0, right: 0, width: 56, height: 56, objectFit: "cover", borderRadius: 6 },
+  nameBlock: { minHeight: 27, paddingBottom: 1 },
   name: { fontFamily: "Helvetica-Bold", fontSize: 25, color: "#163f3b" },
-  headline: { fontSize: 11, color: "#426460", marginBottom: 5 },
-  contact: { color: "#4c5856", fontSize: 8 },
-  contactRow: { marginBottom: 1 },
-  experienceTotal: { marginTop: 6, color: "#356c65", fontSize: 8, fontFamily: "Helvetica-Bold" },
-  rule: { height: 2, backgroundColor: "#163f3b", marginTop: 13, marginBottom: 4 },
+  headline: { fontSize: 11, color: "#426460", marginBottom: 4 },
+  contact: { color: "#4c5856", fontSize: 8, lineHeight: 1.45 },
+  contactLabel: { fontFamily: "Helvetica-Bold", color: "#344441" },
+  contactSeparator: { color: "#8a9a97" },
+  experienceTotal: { marginTop: 3, color: "#356c65", fontSize: 8 },
+  experienceLabel: { fontFamily: "Helvetica-Bold", color: "#284f4a" },
+  rule: { height: 2, backgroundColor: "#163f3b", marginTop: 9, marginBottom: 4 },
   continuationHeader: { position: "absolute", top: 13, left: 42, right: 42, flexDirection: "row", justifyContent: "space-between", color: "#4c5856", fontSize: 7.5 },
   continuationName: { fontFamily: "Helvetica-Bold", color: "#163f3b" },
   section: { marginTop: 11 },
@@ -87,7 +94,7 @@ const PDFResume = ({ cv }: { cv: TailoredCV }) => {
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
   return <Document title={`${clean.contact.fullName} CV`} author={clean.contact.fullName}><Page size="A4" style={[styles.page, clean.templateId === "compact" ? styles.compact : {}]}>
     <View fixed style={styles.continuationHeader} render={({ pageNumber }) => pageNumber > 1 ? <><Text style={styles.continuationName}>{clean.contact.fullName}{clean.contact.headline ? ` · ${clean.contact.headline}` : ""}</Text><Text>{`CV continuation · Page ${pageNumber}`}</Text></> : null} />
-    <View style={styles.header}><View style={styles.identity}><View style={styles.nameBlock}><Text style={styles.name}>{clean.contact.fullName}</Text></View>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}<View style={styles.contact}>{contact.map(([label, value]) => <Text style={styles.contactRow} key={label}>{`${label}: ${value}`}</Text>)}</View>{totalExperience && <Text style={styles.experienceTotal}>{totalExperience} total experience</Text>}</View></View>
+    <View style={styles.header}><View style={[styles.identity, clean.photo?.visible ? styles.identityWithPhoto : {}]}><View style={styles.nameBlock}><Text style={styles.name}>{clean.contact.fullName}</Text></View>{clean.contact.headline && <Text style={styles.headline}>{clean.contact.headline}</Text>}{clean.photo?.visible && <Image style={styles.photo} src={clean.photo.dataUrl} />}<Text style={styles.contact}>{contact.map(([label, value], index) => <React.Fragment key={label}>{index > 0 && <Text style={styles.contactSeparator}> | </Text>}<Text style={styles.contactLabel}>{`${label}: `}</Text><Text>{value}</Text></React.Fragment>)}</Text>{totalExperience && <Text style={styles.experienceTotal}><Text style={styles.experienceLabel}>Experience: </Text>{totalExperience}</Text>}</View></View>
     <View style={styles.rule} />
     {clean.sectionOrder.map((key) => <PDFSection key={key} cv={clean} sectionKey={key} />)}
   </Page></Document>;
@@ -109,14 +116,31 @@ const dataUrlBytes = (dataUrl: string) => {
 export const renderDOCXBlob = async (cv: TailoredCV) => {
   const clean = exportableCV(await withCroppedPhoto(cv));
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(clean));
+  const contact = contactRows(clean);
+  const contactRuns = contact.flatMap(([label, value], index) => [
+    ...(index > 0 ? [new TextRun({ text: " | ", color: "8A9A97" })] : []),
+    new TextRun({ text: `${label}: `, bold: true, color: "344441" }),
+    new TextRun({ text: value, color: "4C5856" }),
+  ]);
   const heading = (text: string) => new Paragraph({ text, heading: HeadingLevel.HEADING_2, keepNext: true, spacing: { before: 220, after: 80 }, border: { bottom: { color: "AAC0BC", size: 4, style: "single", space: 4 } } });
   const children: Paragraph[] = [];
   children.push(
-    new Paragraph({ children: [new TextRun({ text: clean.contact.fullName, bold: true, size: 36, color: "163F3B" })], keepNext: true }),
-    new Paragraph({ children: [new TextRun({ text: clean.contact.headline, size: 22, color: "426460" })], keepNext: true, spacing: { after: 80 } }),
-    ...(clean.photo?.visible ? [new Paragraph({ children: [new ImageRun({ data: dataUrlBytes(clean.photo.dataUrl), transformation: { width: 62, height: 62 }, type: "jpg", altText: { title: "Profile photo", description: `${clean.contact.fullName} profile photo`, name: "Profile photo" } })], keepNext: true, spacing: { after: 80 } })] : []),
-    ...contactRows(clean).map(([label, value], index, rows) => new Paragraph({ children: [new TextRun({ text: `${label}: `, bold: true, color: "344441" }), new TextRun({ text: value, color: "4C5856" })], keepNext: index < rows.length - 1 || Boolean(totalExperience), spacing: { after: 20 } })),
-    ...(totalExperience ? [new Paragraph({ children: [new TextRun({ text: `${totalExperience} total experience`, bold: true, color: "356C65", size: 17 })], spacing: { after: 100 } })] : []),
+    new Paragraph({ children: [
+      new TextRun({ text: clean.contact.fullName, bold: true, size: 36, color: "163F3B" }),
+      ...(clean.photo?.visible ? [new ImageRun({
+        data: dataUrlBytes(clean.photo.dataUrl), transformation: { width: 52, height: 52 }, type: "jpg",
+        altText: { title: "Profile photo", description: `${clean.contact.fullName} profile photo`, name: "Profile photo" },
+        floating: {
+          horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, align: HorizontalPositionAlign.RIGHT },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: 0 },
+          wrap: { type: TextWrappingType.SQUARE, side: TextWrappingSide.LEFT },
+          margins: { left: 90000, right: 0, top: 0, bottom: 45000 },
+        },
+      })] : []),
+    ], keepNext: true }),
+    new Paragraph({ children: [new TextRun({ text: clean.contact.headline, size: 22, color: "426460" })], keepNext: true, spacing: { after: 50 } }),
+    new Paragraph({ children: contactRuns, keepNext: Boolean(totalExperience), spacing: { after: 30 }, widowControl: true }),
+    ...(totalExperience ? [new Paragraph({ children: [new TextRun({ text: "Experience: ", bold: true, color: "284F4A", size: 17 }), new TextRun({ text: totalExperience, color: "356C65", size: 17 })], spacing: { after: 50 } })] : []),
   );
   const addSection = (key: string) => {
     if (key === "summary" && clean.summary.visible && clean.summary.text) children.push(heading("PROFILE"), new Paragraph(clean.summary.text));

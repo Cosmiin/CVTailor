@@ -8,7 +8,7 @@ describe("CVPreview", () => {
     const cv = { ...demoCV, contact: { ...demoCV.contact, website: "https://example.com" }, experience: demoCV.experience.map((item, index) => index ? item : { ...item, startDate: "2022-01", endDate: "2023-06" }) };
     const html = renderToStaticMarkup(<CVPreview cv={cv} />);
     expect(html).toContain("Alex Morgan");
-    expect(html.indexOf("Profile")).toBeLessThan(html.indexOf("Experience"));
+    expect(html.indexOf("<h2>Profile</h2>")).toBeLessThan(html.indexOf("<h2>Experience</h2>"));
     expect(html).toContain("Product operations");
     expect(html).toContain("1 year 6 months");
     expect(html).toContain("Email:");
@@ -16,6 +16,7 @@ describe("CVPreview", () => {
     expect(html).toContain("Location:");
     expect(html).toContain("LinkedIn:");
     expect(html).toContain("Website:");
+    expect(html).toContain("resume-contact-line");
     expect(html).toContain("resume-skills-text");
   });
 
@@ -31,9 +32,10 @@ describe("CVPreview", () => {
     const cv = { ...demoCV, photo: { dataUrl: "data:image/jpeg;base64,YQ==", fileName: "me.jpg", visible: true, positionX: 25, positionY: 70, zoom: 1.3 } };
     const html = renderToStaticMarkup(<CVPreview cv={cv} />);
     expect(html).toContain("resume-photo");
+    expect(html).toContain("resume-identity has-photo");
     expect(html).toContain("Alex Morgan profile");
     expect(html).toContain("object-position:25% 70%");
     expect(html).toContain("scale(1.3)");
-    expect(html).toContain("total experience");
+    expect(html).toContain("<strong>Experience:</strong>");
   });
 });

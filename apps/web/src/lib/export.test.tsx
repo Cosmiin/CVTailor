@@ -51,7 +51,26 @@ describe("CV export renderers", () => {
 
     expect(name).toBeDefined();
     expect(headline).toBeDefined();
-    expect((name?.transform[5] ?? 0) - (headline?.transform[5] ?? 0)).toBeGreaterThanOrEqual(16);
+    expect((name?.transform[5] ?? 0) - (headline?.transform[5] ?? 0)).toBeGreaterThanOrEqual(14);
+  }, 20_000);
+
+  it("keeps the labeled identity block compact and in one reading flow", async () => {
+    const blob = await renderPDFBlob(datedCV);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const document = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+    const content = await (await document.getPage(1)).getTextContent();
+    const items = content.items.filter((item): item is typeof item & { str: string; transform: number[] } => "str" in item && "transform" in item);
+    const name = items.find((item) => item.str === datedCV.contact.fullName);
+    const profile = items.find((item) => item.str.includes(datedCV.summary.text.slice(0, 20)));
+    const labels = ["Email:", "Phone:", "Location:", "LinkedIn:", "Website:"]
+      .map((label) => items.find((item) => item.str.trim() === label))
+      .filter((item): item is typeof items[number] => Boolean(item));
+
+    expect(name).toBeDefined();
+    expect(profile).toBeDefined();
+    expect(labels).toHaveLength(5);
+    expect((name?.transform[5] ?? 0) - (profile?.transform[5] ?? 0)).toBeLessThan(125);
+    expect(Math.max(...labels.map((item) => item.transform[5])) - Math.min(...labels.map((item) => item.transform[5]))).toBeLessThan(20);
   }, 20_000);
 
   it("renders long experience content to PDF without stalling", async () => {
