@@ -216,7 +216,7 @@ export const cvJsonSchema = {
         startDate: { type: "string" }, endDate: { type: "string" }, details: { type: "string" }, visible: { type: "boolean" },
       }, required: ["id", "institution", "qualification", "startDate", "endDate", "details", "visible"],
     } },
-    skills: { type: "array", items: skillItemJson, maxItems: 10 },
+    skills: { type: "array", items: textItemJson },
     projects: { type: "array", items: {
       type: "object", additionalProperties: false,
       properties: { id: { type: "string" }, name: { type: "string" }, link: { type: "string" }, description: { type: "string" }, visible: { type: "boolean" }, provenance: provenanceJson },
@@ -246,6 +246,7 @@ export const tailoredJsonSchema = {
   ...cvJsonSchema,
   properties: {
     ...cvJsonSchema.properties,
+    skills: { type: "array", items: skillItemJson, maxItems: 10 },
     jobId: { type: "string", format: "uuid" },
     templateId: { type: "string", enum: ["clarity", "compact"] },
     generatedAt: { type: "string" },
