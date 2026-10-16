@@ -16,7 +16,7 @@ const job: JobRecord = {
 describe("ApplicationTracker", () => {
   it("shows the current stage, application date, status date, and saved CV", () => {
     const html = renderToStaticMarkup(<ApplicationTracker job={job} cv={cv} onChange={() => undefined} />);
-    expect(html).toContain("Applied - awaiting response");
+    expect(html).toContain("Awaiting response");
     expect(html).toContain("10 Oct 2026");
     expect(html).toContain("11 Oct 2026");
     expect(html).toContain("CV used");

@@ -4,7 +4,7 @@ import type { ApplicationStatus, TailoredCV } from "@cv-maker/shared";
 import { dataApi, type JobRecord } from "../lib/data";
 
 export const applicationStatuses: Array<{ value: ApplicationStatus; label: string }> = [
-  { value: "applied", label: "Applied - awaiting response" },
+  { value: "applied", label: "Awaiting response" },
   { value: "response_received", label: "Response received" },
   { value: "interviewing", label: "Interviewing" },
   { value: "offer", label: "Offer received" },
