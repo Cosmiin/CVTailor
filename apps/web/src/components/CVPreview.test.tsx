@@ -5,12 +5,18 @@ import { CVPreview } from "./CVPreview";
 
 describe("CVPreview", () => {
   it("renders the semantic CV sections in configured order", () => {
-    const cv = { ...demoCV, experience: demoCV.experience.map((item, index) => index ? item : { ...item, startDate: "2022-01", endDate: "2023-06" }) };
+    const cv = { ...demoCV, contact: { ...demoCV.contact, website: "https://example.com" }, experience: demoCV.experience.map((item, index) => index ? item : { ...item, startDate: "2022-01", endDate: "2023-06" }) };
     const html = renderToStaticMarkup(<CVPreview cv={cv} />);
     expect(html).toContain("Alex Morgan");
     expect(html.indexOf("Profile")).toBeLessThan(html.indexOf("Experience"));
     expect(html).toContain("Product operations");
     expect(html).toContain("1 year 6 months");
+    expect(html).toContain("Email:");
+    expect(html).toContain("Phone:");
+    expect(html).toContain("Location:");
+    expect(html).toContain("LinkedIn:");
+    expect(html).toContain("Website:");
+    expect(html).toContain("resume-skills-text");
   });
 
   it("marks inferred content for review in the live preview", () => {

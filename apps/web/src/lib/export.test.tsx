@@ -13,7 +13,7 @@ const longCV = tailoredCVSchema.parse({
     role: `Role ${roleIndex + 1}`,
     bullets: Array.from({ length: 6 }, (_, bulletIndex) => ({
       id: createId("bullet"),
-      text: `Delivered a complex cross-functional initiative ${bulletIndex + 1} with stakeholders across operations, technology, reporting and service delivery while maintaining clear documentation and qualitative outcomes.`,
+      text: `R${roleIndex + 1}B${bulletIndex + 1}START Delivered a complex cross-functional initiative with stakeholders across operations, technology, reporting and service delivery while maintaining clear documentation and qualitative outcomes. R${roleIndex + 1}B${bulletIndex + 1}END`,
       visible: true,
       provenance: { status: "verified" as const, sourceRefs: [`experience.${roleIndex}`] },
     })),
@@ -24,8 +24,20 @@ const datedCV = tailoredCVSchema.parse({
   ...demoCV,
   jobId: "00000000-0000-4000-8000-000000000002",
   generatedAt: "2026-10-16T12:00:00.000Z",
+  contact: { ...demoCV.contact, website: "https://example.com" },
   experience: [{ ...demoCV.experience[0], startDate: "2022-01", endDate: "2023-06" }],
 });
+
+const extractPDFPages = async (blob: Blob) => {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const content = await (await document.getPage(pageNumber)).getTextContent();
+    pages.push(content.items.map((item) => "str" in item ? item.str : "").join(" ").replace(/\s+/g, " "));
+  }
+  return pages;
+};
 
 describe("CV export renderers", () => {
   it("keeps the headline below the candidate name in the PDF header", async () => {
@@ -46,6 +58,22 @@ describe("CV export renderers", () => {
     const blob = await renderPDFBlob(longCV);
     expect(blob.type).toBe("application/pdf");
     expect(blob.size).toBeGreaterThan(1_000);
+
+    const pages = await extractPDFPages(blob);
+    expect(pages.length).toBeGreaterThan(1);
+    pages.slice(1).forEach((page, index) => {
+      expect(page).toContain("Alex Morgan");
+      expect(page).toContain("CV continuation");
+      expect(page).toContain(`Page ${index + 2}`);
+    });
+    Array.from({ length: 7 }, (_, roleIndex) => Array.from({ length: 6 }, (_, bulletIndex) => {
+      const start = `R${roleIndex + 1}B${bulletIndex + 1}START`;
+      const end = `R${roleIndex + 1}B${bulletIndex + 1}END`;
+      expect(pages.findIndex((page) => page.includes(start))).toBe(pages.findIndex((page) => page.includes(end)));
+    }));
+    Array.from({ length: 7 }, (_, roleIndex) => {
+      expect(pages.findIndex((page) => page.includes(`Role ${roleIndex + 1}`))).toBe(pages.findIndex((page) => page.includes(`R${roleIndex + 1}B1START`)));
+    });
   }, 20_000);
 
   it("renders the same accepted content to DOCX", async () => {
@@ -56,10 +84,7 @@ describe("CV export renderers", () => {
 
   it("includes each role tenure in PDF and DOCX exports", async () => {
     const pdfBlob = await renderPDFBlob(datedCV);
-    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const pdfDocument = await pdfjs.getDocument({ data: new Uint8Array(await pdfBlob.arrayBuffer()) }).promise;
-    const pdfContent = await (await pdfDocument.getPage(1)).getTextContent();
-    const pdfText = pdfContent.items.map((item) => "str" in item ? item.str : "").join(" ").replace(/\s+/g, " ");
+    const pdfText = (await extractPDFPages(pdfBlob))[0];
 
     const docxBlob = await renderDOCXBlob(datedCV);
     const mammoth = await import("mammoth/mammoth.browser");
@@ -67,5 +92,9 @@ describe("CV export renderers", () => {
 
     expect(pdfText).toContain("1 year 6 months");
     expect(docxText).toContain("1 year 6 months");
+    ["Email:", "Phone:", "Location:", "LinkedIn:", "Website:"].forEach((label) => {
+      expect(pdfText).toContain(label);
+      expect(docxText).toContain(label);
+    });
   }, 20_000);
 });
