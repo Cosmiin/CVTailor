@@ -107,7 +107,9 @@ export const dataApi = {
         ...document.photo,
         positionX: document.photo.positionX ?? 50,
         positionY: document.photo.positionY ?? 50,
-        zoom: document.photo.zoom ?? 1.15,
+        // Legacy photos can carry an exact 1× value, which leaves square images
+        // with no overflow to reposition. Give those photos a small movable crop.
+        zoom: document.photo.zoom && document.photo.zoom > 1 ? document.photo.zoom : 1.15,
       } : null,
     };
   },
