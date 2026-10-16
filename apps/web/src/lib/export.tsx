@@ -23,6 +23,40 @@ const saveBlob = (blob: Blob, fileName: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 };
 
+export type CVExportFileContext = {
+  company: string;
+  role: string;
+  date?: Date;
+};
+
+const fileNamePart = (value: string, fallback: string) => {
+  const cleaned = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+  return (cleaned || fallback).slice(0, 70).replace(/_+$/g, "");
+};
+
+export const buildCVFileName = (
+  cv: TailoredCV,
+  context: CVExportFileContext,
+  extension: "pdf" | "docx",
+) => {
+  const date = context.date ?? new Date();
+  const month = new Intl.DateTimeFormat("en", { month: "long" }).format(date);
+  const year = date.getFullYear();
+  return [
+    fileNamePart(cv.contact.fullName, "CV"),
+    fileNamePart(context.company, "Company"),
+    fileNamePart(context.role, "Role"),
+    month,
+    year,
+  ].join("_") + `.${extension}`;
+};
+
 const styles = StyleSheet.create({
   page: { padding: 42, fontFamily: "Helvetica", color: "#1f2927", fontSize: 9.5, lineHeight: 1.45 },
   compact: { padding: 32, paddingTop: 38, fontSize: 8.8, lineHeight: 1.36 },
@@ -106,7 +140,8 @@ const withCroppedPhoto = async (cv: TailoredCV): Promise<TailoredCV> => cv.photo
 
 export const renderPDFBlob = async (cv: TailoredCV) => pdf(<PDFResume cv={await withCroppedPhoto(cv)} />).toBlob();
 
-export const exportPDF = async (cv: TailoredCV) => saveBlob(await renderPDFBlob(cv), `${cv.contact.fullName || "CV"}.pdf`);
+export const exportPDF = async (cv: TailoredCV, context: CVExportFileContext) =>
+  saveBlob(await renderPDFBlob(cv), buildCVFileName(cv, context, "pdf"));
 
 const dataUrlBytes = (dataUrl: string) => {
   const encoded = dataUrl.split(",")[1] ?? "";
@@ -175,4 +210,5 @@ export const renderDOCXBlob = async (cv: TailoredCV) => {
   return Packer.toBlob(document);
 };
 
-export const exportDOCX = async (cv: TailoredCV) => saveBlob(await renderDOCXBlob(cv), `${cv.contact.fullName || "CV"}.docx`);
+export const exportDOCX = async (cv: TailoredCV, context: CVExportFileContext) =>
+  saveBlob(await renderDOCXBlob(cv), buildCVFileName(cv, context, "docx"));

@@ -21,8 +21,10 @@ import { appUrl, isSupabaseConfigured, supabase } from "./lib/supabase";
 
 const formatDate = (value: string) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
 const errorMessage = (error: unknown) => error instanceof Error ? error.message.replaceAll("_", " ") : "Something went wrong.";
-const exportPDF = async (cv: TailoredCV) => (await import("./lib/export")).exportPDF(cv);
-const exportDOCX = async (cv: TailoredCV) => (await import("./lib/export")).exportDOCX(cv);
+const exportPDF = async (cv: TailoredCV, job: Pick<JobRecord, "company" | "title">) =>
+  (await import("./lib/export")).exportPDF(cv, { company: job.company, role: job.title });
+const exportDOCX = async (cv: TailoredCV, job: Pick<JobRecord, "company" | "title">) =>
+  (await import("./lib/export")).exportDOCX(cv, { company: job.company, role: job.title });
 
 function Brand({ inverse = false }: { inverse?: boolean }) {
   return <Link to="/" className={`brand ${inverse ? "brand-inverse" : ""}`} aria-label="CV Maker home"><span className="brand-mark"><FileText size={17} /></span><span>CV Maker</span></Link>;
@@ -141,10 +143,10 @@ function JobEditorPage({ onUsage }: { onUsage: () => void }) {
   useEffect(() => { if (!cv || !job || firstSave.current) { firstSave.current = false; return; } setSaved(false); const timer = setTimeout(() => dataApi.saveTailoredJob(job.id, cv).then(() => setSaved(true)).catch((caught) => setError(errorMessage(caught))), 800); return () => clearTimeout(timer); }, [cv, job]);
   const tailor = async () => { if (!job || job.parseStatus !== "completed") return; setBusy(true); setError(""); try { const result = await dataApi.tailorJob(job, job.templateId); setCV(result); setSnapshot(result); setJob({ ...job, latestTailoredCV: result }); onUsage(); } catch (caught) { setError(errorMessage(caught)); } finally { setBusy(false); } };
   const download = async (format: "pdf" | "docx") => {
-    if (!cv || exporting) return;
+    if (!cv || !job || exporting) return;
     setExporting(format); setError("");
     try {
-      if (format === "pdf") await exportPDF(cv); else await exportDOCX(cv);
+      if (format === "pdf") await exportPDF(cv, job); else await exportDOCX(cv, job);
     } catch (caught) {
       setError(`Could not create the ${format.toUpperCase()} file. ${errorMessage(caught)}`);
     } finally { setExporting(null); }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createId, demoCV, tailoredCVSchema } from "@cv-maker/shared";
-import { renderDOCXBlob, renderPDFBlob } from "./export";
+import { buildCVFileName, renderDOCXBlob, renderPDFBlob } from "./export";
 
 const longCV = tailoredCVSchema.parse({
   ...demoCV,
@@ -40,6 +40,18 @@ const extractPDFPages = async (blob: Blob) => {
 };
 
 describe("CV export renderers", () => {
+  it("builds a safe name-company-role-month-year download filename", () => {
+    const cv = { ...datedCV, contact: { ...datedCV.contact, fullName: "Cosmin Marin" } };
+    const context = { company: "BAUMIT România & Co.", role: "AI / Automation Specialist", date: new Date("2026-10-16T12:00:00Z") };
+
+    expect(buildCVFileName(cv, context, "pdf")).toBe(
+      "Cosmin_Marin_BAUMIT_Romania_and_Co_AI_Automation_Specialist_October_2026.pdf",
+    );
+    expect(buildCVFileName(cv, context, "docx")).toBe(
+      "Cosmin_Marin_BAUMIT_Romania_and_Co_AI_Automation_Specialist_October_2026.docx",
+    );
+  });
+
   it("keeps the headline below the candidate name in the PDF header", async () => {
     const blob = await renderPDFBlob(longCV);
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
