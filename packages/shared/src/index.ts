@@ -242,6 +242,16 @@ export const jobSnapshotSchema = z.object({
 
 export const cvTemplateIdSchema = z.enum(["clarity", "compact"]);
 
+export const applicationStatusSchema = z.enum([
+  "not_applied",
+  "applied",
+  "response_received",
+  "interviewing",
+  "offer",
+  "rejected",
+  "withdrawn",
+]);
+
 export const tailoredCVSchema = baseCVSchema.extend({
   jobId: z.string().uuid().optional(),
   templateId: cvTemplateIdSchema.default("clarity"),
@@ -266,6 +276,7 @@ export type JobSnapshot = z.infer<typeof jobSnapshotSchema>;
 export type TailoredCV = z.infer<typeof tailoredCVSchema>;
 export type QuotaState = z.infer<typeof quotaStateSchema>;
 export type CVTemplateId = z.infer<typeof cvTemplateIdSchema>;
+export type ApplicationStatus = z.infer<typeof applicationStatusSchema>;
 export type ExperienceInterviewOption = z.infer<typeof experienceInterviewOptionSchema>;
 export type ExperienceInterviewQuestion = z.infer<typeof experienceInterviewQuestionSchema>;
 export type ExperienceInterviewAnswer = z.infer<typeof experienceInterviewAnswerSchema>;

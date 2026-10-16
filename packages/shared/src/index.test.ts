@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
+  applicationStatusSchema, calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
   exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
 describe("shared CV rules", () => {
+  it("accepts only supported application stages", () => {
+    expect(applicationStatusSchema.parse("interviewing")).toBe("interviewing");
+    expect(applicationStatusSchema.safeParse("ghosted").success).toBe(false);
+  });
+
   it("normalizes untrusted text", () => {
     expect(normalizeText(" hello\u0000   world\r\n\r\n\r\nnext ")).toBe("hello world\n\nnext");
   });

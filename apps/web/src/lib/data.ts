@@ -1,13 +1,17 @@
 import type {
-  BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceInterviewAnswer,
+  ApplicationStatus, BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceInterviewAnswer,
   JobSnapshot, QuotaState, TailoredCV,
 } from "@cv-maker/shared";
-import { demoCV, experienceEnrichmentSchema, experienceFingerprint, tailoredCVSchema } from "@cv-maker/shared";
+import { demoCV, experienceEnrichmentSchema, experienceFingerprint, exportableCV, tailoredCVSchema } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 export type JobRecord = JobSnapshot & {
   id: string;
   latestTailoredCV: TailoredCV | null;
+  applicationStatus: ApplicationStatus;
+  appliedAt: string | null;
+  applicationStatusChangedAt: string | null;
+  appliedCV: TailoredCV | null;
   templateId: CVTemplateId;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +67,10 @@ const rowToJob = (row: any): JobRecord => ({
   seniority: row.seniority ?? row.structured_data?.seniority ?? null,
   sourceLanguage: row.source_language ?? row.structured_data?.sourceLanguage ?? null,
   latestTailoredCV: row.latest_tailored_cv,
+  applicationStatus: row.application_status ?? "not_applied",
+  appliedAt: row.applied_at ?? null,
+  applicationStatusChangedAt: row.application_status_changed_at ?? null,
+  appliedCV: row.applied_cv ?? null,
   templateId: row.template_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -250,7 +258,9 @@ export const dataApi = {
         schemaVersion: 2, id: crypto.randomUUID(), url: input.url ?? "", title: input.title || "Senior Product Operations Manager",
         company: input.company || "Acme Systems", description: input.description || "Lead product operations, planning, experimentation and cross-functional delivery. Use data to improve customer outcomes.",
         captureMethod: input.description ? "paste" : "url", capturedAt: now, structuredData: null, parseStatus: "completed", parseWarnings: [], location: "", datePosted: null,
-        employmentType: null, seniority: null, sourceLanguage: null, latestTailoredCV: null, templateId: "clarity", createdAt: now, updatedAt: now,
+        employmentType: null, seniority: null, sourceLanguage: null, latestTailoredCV: null,
+        applicationStatus: "not_applied", appliedAt: null, applicationStatusChangedAt: null, appliedCV: null,
+        templateId: "clarity", createdAt: now, updatedAt: now,
       };
       const store = readDemo(); store.jobs.unshift(job); writeDemo(store); return job;
     }
@@ -285,6 +295,33 @@ export const dataApi = {
     }
     const { error } = await supabase!.from("jobs").update({ latest_tailored_cv: cv, template_id: cv.templateId }).eq("id", jobId);
     if (error) throw error;
+  },
+
+  async updateApplication(jobId: string, input: { status: ApplicationStatus; appliedAt?: string | null; cv?: TailoredCV }): Promise<JobRecord> {
+    const now = new Date().toISOString();
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const index = store.jobs.findIndex((job) => job.id === jobId);
+      if (index < 0) throw new Error("Job not found.");
+      const current = store.jobs[index]; const applied = input.status !== "not_applied";
+      const next: JobRecord = {
+        ...current,
+        applicationStatus: input.status,
+        appliedAt: applied ? input.appliedAt ?? current.appliedAt ?? now : null,
+        applicationStatusChangedAt: input.status !== current.applicationStatus ? now : current.applicationStatusChangedAt,
+        appliedCV: applied ? current.appliedCV ?? (input.cv ? exportableCV(input.cv) : current.latestTailoredCV ? exportableCV(current.latestTailoredCV) : null) : null,
+        updatedAt: now,
+      };
+      store.jobs[index] = next; writeDemo(store); return next;
+    }
+    const values: Record<string, unknown> = {
+      application_status: input.status,
+      applied_at: input.status === "not_applied" ? null : input.appliedAt,
+    };
+    if (input.status === "not_applied") values.applied_cv = null;
+    else if (input.cv) values.applied_cv = exportableCV(input.cv);
+    const { data, error } = await supabase!.from("jobs").update(values).eq("id", jobId).select("*").single();
+    if (error) throw error;
+    return rowToJob(data);
   },
 
   async deleteJob(jobId: string): Promise<void> {

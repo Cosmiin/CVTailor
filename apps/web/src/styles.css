@@ -169,7 +169,7 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .empty-state h2 { margin: 12px 0 8px; font-size: 28px; }
 .empty-state p { max-width: 470px; margin: 0 0 24px; color: var(--muted); line-height: 1.6; }
 .job-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.job-card { min-height: 255px; padding: 20px; border: 1px solid #d8d9d4; border-radius: 12px; background: #fffefa; transition: transform .18s, box-shadow .18s; }
+.job-card { min-height: 330px; padding: 20px; border: 1px solid #d8d9d4; border-radius: 12px; background: #fffefa; transition: transform .18s, box-shadow .18s; }
 .job-card:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(30, 43, 40, .07); }
 .job-card-top { display: flex; justify-content: space-between; }
 .company-avatar { width: 39px; height: 39px; display: inline-grid; place-items: center; border-radius: 10px; color: var(--green); background: var(--mint); font-weight: 800; text-transform: uppercase; }
@@ -183,6 +183,39 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .job-card-location { margin-top: 7px; color: #75807d; display: block; font-size: 10px; }
 .job-card-footer { margin-top: 27px; padding-top: 14px; border-top: 1px solid #e6e5df; display: flex; align-items: center; justify-content: space-between; }
 .job-card-footer > span { color: #8a918f; font-size: 10px; }
+.application-tracker { margin: 0 0 28px; padding: 16px 17px; border: 1px solid #cfdad6; border-radius: 11px; background: #f8fbfa; display: grid; gap: 13px; }
+.application-tracker.card { margin: 16px 0 0; padding: 12px; border-color: #dfe2dc; border-radius: 9px; background: #f5f6f2; gap: 10px; }
+.application-tracker.unavailable { color: var(--muted); gap: 3px; }
+.application-tracker.unavailable > span { color: #4f5b58; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+.application-tracker.unavailable small { font-size: 10px; line-height: 1.45; }
+.application-tracker-intro, .application-tracker-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.application-tracker-intro { align-items: flex-start; }
+.application-tracker-intro > div { min-width: 0; flex: 1; }
+.application-tracker-intro strong, .application-tracker-intro small { display: block; }
+.application-tracker-intro strong { margin-bottom: 3px; font-size: 12px; }
+.application-tracker-intro small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.application-tracker-icon { width: 32px; height: 32px; flex: none; border-radius: 9px; color: var(--green-2); background: #e0eeea; display: grid; place-items: center; }
+.application-tracker.card .application-tracker-icon { width: 28px; height: 28px; }
+.application-tracker.card > .button { width: 100%; }
+.application-tracker-heading > div { display: flex; align-items: center; gap: 11px; }
+.application-tracker-heading .section-kicker { margin: 0; }
+.application-stage { padding: 5px 8px; border-radius: 20px; font-size: 10px; font-weight: 750; }
+.application-stage.waiting { color: #6f581f; background: #f4ead0; }
+.application-stage.active { color: #235b70; background: #dfeef3; }
+.application-stage.success { color: #285d3a; background: #e1f2e5; }
+.application-stage.closed { color: #76504b; background: #f2e5e3; }
+.application-controls { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(160px, .45fr); gap: 10px; }
+.application-controls label { font-size: 9px; }
+.application-controls select, .application-controls input { min-height: 38px; margin-top: 5px; padding: 7px 10px; font-size: 11px; }
+.application-tracker.card .application-controls { grid-template-columns: 1fr; gap: 7px; }
+.application-tracker.card .application-controls label { font-size: 8px; }
+.application-tracker.card .application-controls select, .application-tracker.card .application-controls input { min-height: 34px; margin-top: 3px; padding: 5px 8px; font-size: 10px; }
+.application-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; color: #6d7774; font-size: 9px; }
+.application-meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.application-meta svg { flex: none; color: #6d8e87; }
+.application-meta strong { color: #42504d; }
+.application-tracker.card .application-meta { display: grid; gap: 5px; }
+.application-error { color: #9b4037; font-size: 9px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; padding: 30px; background: rgba(12, 26, 24, .45); backdrop-filter: blur(5px); display: grid; place-items: center; }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 50px); overflow: auto; padding: 34px; border-radius: 15px; background: var(--paper); box-shadow: 0 30px 90px rgba(10, 24, 22, .24); display: grid; gap: 17px; position: relative; }
 .modal-close { position: absolute; top: 17px; right: 17px; }
@@ -518,6 +551,8 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
   .workspace-header, .job-editor-header { align-items: flex-start; flex-direction: column; }
   .workspace-header h1, .job-editor-header h1 { font-size: 32px; }
   .job-grid { grid-template-columns: 1fr; }
+  .application-controls { grid-template-columns: 1fr; }
+  .application-tracker-intro, .application-tracker-heading { align-items: flex-start; }
   .form-row, .details-body.form-grid, .details-body > .form-grid { grid-template-columns: 1fr; }
   .full-span { grid-column: auto; }
   .photo-editor { grid-template-columns: 86px 1fr; }
