@@ -6,11 +6,20 @@ import {
 } from "lucide-react";
 import {
   calculateExperienceMonths, createId, formatExperienceDuration, isPresentExperienceDate,
-  toExperienceMonthInput, type BaseCV, type TailoredItemProvenance,
+  toExperienceMonthInput, type BaseCV, type ExperienceEnrichment, type TailoredItemProvenance,
 } from "@cv-maker/shared";
 import { prepareProfilePhoto } from "../lib/photo";
+import { ExperienceContextPanel } from "./ExperienceInterview";
 
-type Props = { cv: BaseCV; onChange: (cv: BaseCV) => void; baseMode?: boolean };
+type Props = {
+  cv: BaseCV;
+  onChange: (cv: BaseCV) => void;
+  baseMode?: boolean;
+  enrichments?: Record<string, ExperienceEnrichment>;
+  onOpenInterview?: (experienceId: string) => void;
+  onConfirmContext?: (experienceId: string) => void;
+  onDeleteContext?: (experienceId: string) => void;
+};
 const verified = (source = "user.edit"): TailoredItemProvenance => ({ status: "verified", sourceRefs: [source] });
 const clampPosition = (value: number) => Math.max(0, Math.min(100, value));
 
@@ -40,7 +49,7 @@ function PhotoPositioner({ cv, onChange }: Props) {
   ><img src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={{ objectPosition: `${positionX}% ${positionY}%` }} /><span>Drag to center</span></div>;
 }
 
-export function CVForm({ cv, onChange, baseMode = false }: Props) {
+export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpenInterview, onConfirmContext, onDeleteContext }: Props) {
   const updateContact = (key: keyof BaseCV["contact"], value: string) => onChange({ ...cv, contact: { ...cv.contact, [key]: value } });
   const moveSection = (index: number, direction: number) => {
     const next = [...cv.sectionOrder]; const target = index + direction;
@@ -75,6 +84,7 @@ export function CVForm({ cv, onChange, baseMode = false }: Props) {
         <div className="form-grid"><label>Role<input placeholder="Senior Product Manager" value={item.role} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry) })} /></label><label>Company<input placeholder="Company name" value={item.company} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry) })} /></label><label>Location<input placeholder="City, country or Remote" value={item.location} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry) })} /></label><div className="date-pair"><label>From<input type="month" min="1960-01" max="2100-12" value={toExperienceMonthInput(item.startDate, "start")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry) })} /></label><label>To<input type="month" min="1960-01" max="2100-12" disabled={isPresentExperienceDate(item.endDate)} value={toExperienceMonthInput(item.endDate, "end")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.value } : entry) })} /></label><label className="current-role"><input type="checkbox" checked={isPresentExperienceDate(item.endDate)} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.checked ? "Present" : "" } : entry) })} />Current role</label></div></div>
         <div className="achievement-label">Achievements and responsibilities</div>{item.bullets.map((bullet) => <div className="bullet-edit" key={bullet.id}><span>•</span><textarea rows={2} placeholder="Start with an action and include the result where possible." value={bullet.text} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.map((value) => value.id === bullet.id ? { ...value, text: event.target.value } : value) } : entry) })} /><button className="icon-button" aria-label="Delete bullet" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.filter((value) => value.id !== bullet.id) } : entry) })}><X size={14} /></button></div>)}
         <button className="text-button" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: [...entry.bullets, { id: createId("bullet"), text: "", visible: true, provenance: verified(baseMode ? `base.experience.${itemIndex}` : "user.edit") }] } : entry) })}><Plus size={14} />Add achievement</button>
+        {baseMode && onOpenInterview && onConfirmContext && onDeleteContext && <ExperienceContextPanel experience={item} record={enrichments[item.id] ?? null} onOpen={() => onOpenInterview(item.id)} onConfirm={() => onConfirmContext(item.id)} onDelete={() => onDeleteContext(item.id)} />}
       </article>)}
       <button className="add-card-button" onClick={() => onChange({ ...cv, experience: [...cv.experience, { id: createId("experience"), company: "", role: "", location: "", startDate: "", endDate: "", visible: true, bullets: [{ id: createId("bullet"), text: "", visible: true, provenance: verified("user.edit") }] }] })}><Plus size={15} />Add experience</button>
     </div></details>

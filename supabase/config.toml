@@ -40,5 +40,8 @@ verify_jwt = true
 [functions.tailor-cv]
 verify_jwt = true
 
+[functions.enrich-experience]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true

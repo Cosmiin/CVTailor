@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const SCHEMA_VERSION = 1 as const;
 export const JOB_SCHEMA_VERSION = 2 as const;
+export const EXPERIENCE_ENRICHMENT_SCHEMA_VERSION = 1 as const;
 
 export const provenanceStatusSchema = z.enum([
   "verified",
@@ -49,6 +50,73 @@ export const experienceSchema = z.object({
   endDate: z.string().max(40).default(""),
   visible: z.boolean().default(true),
   bullets: z.array(textItemSchema).max(20).default([]),
+});
+
+export const experienceInterviewOptionSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(240),
+});
+
+export const experienceInterviewQuestionSchema = z.object({
+  id: z.string().min(1).max(80),
+  prompt: z.string().min(1).max(600),
+  type: z.enum(["single", "multiple"]),
+  options: z.array(experienceInterviewOptionSchema).min(2).max(8),
+  rationale: z.string().max(300).default(""),
+});
+
+export const experienceInterviewAnswerSchema = z.object({
+  questionId: z.string().min(1).max(80),
+  selectedOptionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  note: z.string().max(1500).default(""),
+});
+
+export const experienceInterviewDraftSchema = z.object({
+  schemaVersion: z.literal(EXPERIENCE_ENRICHMENT_SCHEMA_VERSION),
+  sourceFingerprint: z.string().min(1).max(80),
+  questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
+  answers: z.array(experienceInterviewAnswerSchema).max(10).default([]),
+  currentIndex: z.number().int().min(0).max(9).default(0),
+  startedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const contextList = z.array(z.string().min(1).max(500)).max(12).default([]);
+
+export const experienceContextSkillSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().min(1).max(80).refine((value) => value.trim().split(/\s+/).length <= 3, "Skill names must contain at most three words."),
+  evidence: z.string().min(1).max(500),
+  sourceQuestionIds: z.array(z.string().min(1).max(80)).min(1).max(10),
+});
+
+export const experienceContextSchema = z.object({
+  schemaVersion: z.literal(EXPERIENCE_ENRICHMENT_SCHEMA_VERSION),
+  overview: z.string().min(1).max(1200),
+  responsibilities: contextList,
+  methods: contextList,
+  tools: contextList,
+  scope: contextList,
+  domains: contextList,
+  outcomes: contextList,
+  skills: z.array(experienceContextSkillSchema).min(5).max(6),
+});
+
+export const approvedExperienceContextSchema = z.object({
+  sourceFingerprint: z.string().min(1).max(80),
+  context: experienceContextSchema,
+  questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
+  answers: z.array(experienceInterviewAnswerSchema).min(5).max(10),
+  approvedAt: z.string().datetime(),
+});
+
+export const experienceEnrichmentSchema = z.object({
+  experienceId: z.string().min(1).max(120),
+  active: approvedExperienceContextSchema.nullable().default(null),
+  draft: experienceInterviewDraftSchema.nullable().default(null),
+  pending: experienceContextSchema.nullable().default(null),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
 
 export const educationSchema = z.object({
@@ -193,6 +261,14 @@ export type JobSnapshot = z.infer<typeof jobSnapshotSchema>;
 export type TailoredCV = z.infer<typeof tailoredCVSchema>;
 export type QuotaState = z.infer<typeof quotaStateSchema>;
 export type CVTemplateId = z.infer<typeof cvTemplateIdSchema>;
+export type ExperienceInterviewOption = z.infer<typeof experienceInterviewOptionSchema>;
+export type ExperienceInterviewQuestion = z.infer<typeof experienceInterviewQuestionSchema>;
+export type ExperienceInterviewAnswer = z.infer<typeof experienceInterviewAnswerSchema>;
+export type ExperienceInterviewDraft = z.infer<typeof experienceInterviewDraftSchema>;
+export type ExperienceContextSkill = z.infer<typeof experienceContextSkillSchema>;
+export type ExperienceContext = z.infer<typeof experienceContextSchema>;
+export type ApprovedExperienceContext = z.infer<typeof approvedExperienceContextSchema>;
+export type ExperienceEnrichment = z.infer<typeof experienceEnrichmentSchema>;
 
 export const createId = (prefix = "item") =>
   `${prefix}-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
@@ -239,6 +315,23 @@ export const normalizeText = (value: string, maxLength = 100_000) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, maxLength);
+
+export const experienceFingerprint = (experience: Pick<z.infer<typeof experienceSchema>, "company" | "role" | "location" | "startDate" | "endDate" | "bullets">): string => {
+  const source = JSON.stringify({
+    company: normalizeText(experience.company, 160),
+    role: normalizeText(experience.role, 160),
+    location: normalizeText(experience.location, 160),
+    startDate: experience.startDate.trim(),
+    endDate: experience.endDate.trim(),
+    bullets: experience.bullets.map((item) => ({ text: normalizeText(item.text, 1500), visible: item.visible })),
+  });
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index++) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+};
 
 const experienceMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 const monthLookup = new Map(experienceMonths.map((month, index) => [month.toLowerCase(), index]));

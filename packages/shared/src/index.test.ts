@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateExperienceMonths, demoCV, exportableCV, formatExperienceDate, formatExperienceDuration,
-  hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
+  calculateExperienceMonths, demoCV, experienceContextSchema, experienceFingerprint, experienceInterviewDraftSchema,
+  exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
 describe("shared CV rules", () => {
@@ -71,5 +71,29 @@ describe("shared CV rules", () => {
     expect(job.datePosted).toBeNull();
     expect(job.title).toBe("Specialist Digitalizare");
     expect(job.responsibilities[0]).toContain("Analizează");
+  });
+
+  it("validates a resumable interview and supported context skills", () => {
+    const now = new Date().toISOString();
+    const questions = Array.from({ length: 5 }, (_, index) => ({
+      id: `q${index + 1}`, prompt: `Question ${index + 1}?`, type: "single" as const,
+      options: [{ id: "yes", label: "Yes" }, { id: "na", label: "Not applicable" }], rationale: "",
+    }));
+    expect(experienceInterviewDraftSchema.parse({
+      schemaVersion: 1, sourceFingerprint: "v1-test", questions, answers: [], currentIndex: 0, startedAt: now, updatedAt: now,
+    }).questions).toHaveLength(5);
+    expect(experienceContextSchema.safeParse({
+      schemaVersion: 1, overview: "Led a product operations function.", responsibilities: [], methods: [], tools: [], scope: [], domains: [], outcomes: [],
+      skills: Array.from({ length: 5 }, (_, index) => ({ id: `s${index}`, name: index ? `Skill ${index}` : "Agentic Development", evidence: "Confirmed in the interview.", sourceQuestionIds: ["q1"] })),
+    }).success).toBe(true);
+  });
+
+  it("fingerprints experience content and rejects four-word skills", () => {
+    const first = experienceFingerprint(demoCV.experience[0]);
+    expect(experienceFingerprint({ ...demoCV.experience[0], role: `${demoCV.experience[0].role} II` })).not.toBe(first);
+    expect(experienceContextSchema.safeParse({
+      schemaVersion: 1, overview: "Overview", responsibilities: [], methods: [], tools: [], scope: [], domains: [], outcomes: [],
+      skills: Array.from({ length: 5 }, (_, index) => ({ id: `s${index}`, name: index ? `Skill ${index}` : "One two three four", evidence: "Evidence", sourceQuestionIds: ["q1"] })),
+    }).success).toBe(false);
   });
 });

@@ -169,7 +169,7 @@ export const jobStructuredJsonSchema = {
 const provenanceJson = {
   type: "object", additionalProperties: false,
   properties: {
-    status: { type: "string", enum: ["verified", "inferred_unconfirmed"] },
+    status: { type: "string", enum: ["verified", "inferred_unconfirmed", "confirmed_by_user"] },
     sourceRefs: { type: "array", items: { type: "string" } },
     rationale: { type: "string" },
   }, required: ["status", "sourceRefs", "rationale"],
@@ -242,4 +242,98 @@ export const tailoredJsonSchema = {
     generatedAt: { type: "string" },
   },
   required: [...cvJsonSchema.required, "jobId", "templateId", "generatedAt"],
+};
+
+export const experienceInterviewOptionSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(240),
+});
+
+export const experienceInterviewQuestionSchema = z.object({
+  id: z.string().min(1).max(80),
+  prompt: z.string().min(1).max(600),
+  type: z.enum(["single", "multiple"]),
+  options: z.array(experienceInterviewOptionSchema).min(2).max(8),
+  rationale: z.string().max(300),
+});
+
+export const experienceInterviewAnswerSchema = z.object({
+  questionId: z.string().min(1).max(80),
+  selectedOptionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  note: z.string().max(1500),
+});
+
+export const experienceInterviewDraftSchema = z.object({
+  schemaVersion: z.literal(1),
+  sourceFingerprint: z.string().min(1).max(80),
+  questions: z.array(experienceInterviewQuestionSchema).min(5).max(10),
+  answers: z.array(experienceInterviewAnswerSchema).max(10),
+  currentIndex: z.number().int().min(0).max(9),
+  startedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const experienceContextList = z.array(z.string().min(1).max(500)).max(12);
+export const experienceContextSkillSchema = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().min(1).max(80).refine((value) => value.trim().split(/\s+/).length <= 3),
+  evidence: z.string().min(1).max(500),
+  sourceQuestionIds: z.array(z.string().min(1).max(80)).min(1).max(10),
+});
+
+export const experienceContextSchema = z.object({
+  schemaVersion: z.literal(1),
+  overview: z.string().min(1).max(1200),
+  responsibilities: experienceContextList,
+  methods: experienceContextList,
+  tools: experienceContextList,
+  scope: experienceContextList,
+  domains: experienceContextList,
+  outcomes: experienceContextList,
+  skills: z.array(experienceContextSkillSchema).min(5).max(6),
+});
+
+const interviewOptionJson = {
+  type: "object", additionalProperties: false,
+  properties: { id: { type: "string" }, label: { type: "string" } },
+  required: ["id", "label"],
+};
+
+const interviewQuestionJson = {
+  type: "object", additionalProperties: false,
+  properties: {
+    id: { type: "string" }, prompt: { type: "string" }, type: { type: "string", enum: ["single", "multiple"] },
+    options: { type: "array", items: interviewOptionJson }, rationale: { type: "string" },
+  },
+  required: ["id", "prompt", "type", "options", "rationale"],
+};
+
+export const experienceQuestionsJsonSchema = {
+  type: "object", additionalProperties: false,
+  properties: { questions: { type: "array", items: interviewQuestionJson } },
+  required: ["questions"],
+};
+
+const contextListJson = { type: "array", items: { type: "string" } };
+export const experienceContextJsonSchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    schemaVersion: { type: "integer", enum: [1] },
+    overview: { type: "string" },
+    responsibilities: contextListJson,
+    methods: contextListJson,
+    tools: contextListJson,
+    scope: contextListJson,
+    domains: contextListJson,
+    outcomes: contextListJson,
+    skills: { type: "array", items: {
+      type: "object", additionalProperties: false,
+      properties: {
+        id: { type: "string" }, name: { type: "string" }, evidence: { type: "string" },
+        sourceQuestionIds: { type: "array", items: { type: "string" } },
+      },
+      required: ["id", "name", "evidence", "sourceQuestionIds"],
+    } },
+  },
+  required: ["schemaVersion", "overview", "responsibilities", "methods", "tools", "scope", "domains", "outcomes", "skills"],
 };

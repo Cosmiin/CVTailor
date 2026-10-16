@@ -9,10 +9,11 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import {
   baseCVSchema, createId, demoCV, emptyBaseCV, hasUnconfirmedClaims,
-  type BaseCV, type CVTemplateId, type TailoredCV,
+  type BaseCV, type CVTemplateId, type ExperienceEnrichment, type TailoredCV,
 } from "@cv-maker/shared";
 import { CVPreview } from "./components/CVPreview";
 import { CVForm as CompleteCVForm } from "./components/CVForm";
+import { ExperienceInterview } from "./components/ExperienceInterview";
 import { dataApi, type JobRecord } from "./lib/data";
 import { extractCVText } from "./lib/extract";
 import { appUrl, isSupabaseConfigured, supabase } from "./lib/supabase";
@@ -93,22 +94,32 @@ function JobsPage({ onUsage }: { onUsage: () => void }) {
 }
 
 function BaseCVPage() {
-  const [cv, setCV] = useState<BaseCV | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false); const [error, setError] = useState(""); const [fileBusy, setFileBusy] = useState(false); const pendingFile = useRef<File | undefined>(undefined); const first = useRef(true);
-  useEffect(() => { dataApi.getBaseCV().then((value) => setCV(value ?? emptyBaseCV())).finally(() => setLoading(false)); }, []);
+  const [cv, setCV] = useState<BaseCV | null>(null); const [enrichments, setEnrichments] = useState<Record<string, ExperienceEnrichment>>({}); const [interviewId, setInterviewId] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false); const [error, setError] = useState(""); const [fileBusy, setFileBusy] = useState(false); const pendingFile = useRef<File | undefined>(undefined); const first = useRef(true);
+  useEffect(() => { Promise.all([dataApi.getBaseCV(), dataApi.listExperienceEnrichments()]).then(([value, records]) => { setCV(value ?? emptyBaseCV()); setEnrichments(Object.fromEntries(records.map((record) => [record.experienceId, record]))); }).catch((caught) => setError(errorMessage(caught))).finally(() => setLoading(false)); }, []);
   useEffect(() => { if (!cv || loading || first.current) { first.current = false; return; } setSaved(false); const timer = setTimeout(async () => { setSaving(true); try { await dataApi.saveBaseCV(cv, pendingFile.current); pendingFile.current = undefined; setSaved(true); } catch (caught) { setError(errorMessage(caught)); } finally { setSaving(false); } }, 900); return () => clearTimeout(timer); }, [cv, loading]);
+  const changeCV = (next: BaseCV) => {
+    const removed = cv?.experience.filter((item) => !next.experience.some((candidate) => candidate.id === item.id)).map((item) => item.id) ?? [];
+    setCV(next);
+    removed.forEach((id) => dataApi.deleteExperienceContext(id).then(() => setEnrichments((current) => { const copy = { ...current }; delete copy[id]; return copy; })).catch((caught) => setError(errorMessage(caught))));
+  };
   const upload = async (file?: File) => {
     if (!file) return; setFileBusy(true); setError("");
     try {
       const text = await extractCVText(file);
       if (supabase) {
         const { data, error: invokeError } = await supabase.functions.invoke("parse-cv", { body: { text, fileName: file.name } });
-        if (invokeError || data?.error) throw new Error(data?.error || invokeError.message); setCV(baseCVSchema.parse(data.cv));
-      } else setCV({ ...demoCV, contact: { ...demoCV.contact, fullName: file.name.replace(/\.(pdf|docx)$/i, "") || demoCV.contact.fullName } });
+        if (invokeError || data?.error) throw new Error(data?.error || invokeError.message); changeCV(baseCVSchema.parse(data.cv));
+      } else changeCV({ ...demoCV, contact: { ...demoCV.contact, fullName: file.name.replace(/\.(pdf|docx)$/i, "") || demoCV.contact.fullName } });
       pendingFile.current = file;
     } catch (caught) { setError(errorMessage(caught)); } finally { setFileBusy(false); }
   };
   if (loading || !cv) return <Loading />;
-  return <main className="workspace editor-workspace"><header className="workspace-header"><div><span className="section-kicker">Your source of truth</span><h1>Base CV</h1><p>Add every role, employer and achievement once. Each tailored version will select and refine the most relevant facts.</p></div><div className="save-state">{saving ? <><LoaderCircle className="spin" size={15} /> Saving</> : saved ? <><Check size={15} /> Saved</> : "Autosave on"}</div></header><div className="base-toolbar"><label className="button button-ghost file-button">{fileBusy ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />} {fileBusy ? "Reading file…" : "Replace from PDF or DOCX"}<input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => upload(event.target.files?.[0])} /></label><span>We extract the facts first, then you can correct or expand every section below.</span></div>{error && <div className="notice error"><CircleAlert size={16} />{error}</div>}<div className="editor-layout"><CompleteCVForm cv={cv} onChange={setCV} baseMode /><div className="preview-column sticky"><div className="preview-label"><span>Live base CV</span><small>Everything you add becomes reusable evidence</small></div><CVPreview cv={cv} /></div></div></main>;
+  const interviewExperience = interviewId ? cv.experience.find((item) => item.id === interviewId) : null;
+  const updateEnrichment = (record: ExperienceEnrichment | null) => { if (!interviewId) return; setEnrichments((current) => { const next = { ...current }; if (record) next[interviewId] = record; else delete next[interviewId]; return next; }); };
+  const openInterview = async (id: string) => { try { await dataApi.saveBaseCV(cv); setInterviewId(id); } catch (caught) { setError(errorMessage(caught)); } };
+  const confirmContext = async (id: string) => { try { await dataApi.saveBaseCV(cv); const record = await dataApi.confirmExperienceContext(id); setEnrichments((current) => ({ ...current, [id]: record })); } catch (caught) { setError(errorMessage(caught)); } };
+  const deleteContext = async (id: string) => { if (!window.confirm("Remove the saved interview and role context?")) return; try { await dataApi.deleteExperienceContext(id); setEnrichments((current) => { const next = { ...current }; delete next[id]; return next; }); } catch (caught) { setError(errorMessage(caught)); } };
+  return <main className="workspace editor-workspace"><header className="workspace-header"><div><span className="section-kicker">Your source of truth</span><h1>Base CV</h1><p>Add every role, employer and achievement once. Each tailored version will select and refine the most relevant facts.</p></div><div className="save-state">{saving ? <><LoaderCircle className="spin" size={15} /> Saving</> : saved ? <><Check size={15} /> Saved</> : "Autosave on"}</div></header><div className="base-toolbar"><label className="button button-ghost file-button">{fileBusy ? <LoaderCircle className="spin" size={16} /> : <Upload size={16} />} {fileBusy ? "Reading file…" : "Replace from PDF or DOCX"}<input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => upload(event.target.files?.[0])} /></label><span>We extract the facts first, then you can correct or expand every section below.</span></div>{error && <div className="notice error"><CircleAlert size={16} />{error}</div>}<div className="editor-layout"><CompleteCVForm cv={cv} onChange={changeCV} baseMode enrichments={enrichments} onOpenInterview={openInterview} onConfirmContext={confirmContext} onDeleteContext={deleteContext} /><div className="preview-column sticky"><div className="preview-label"><span>Live base CV</span><small>Everything you add becomes reusable evidence</small></div><CVPreview cv={cv} /></div></div>{interviewExperience && <ExperienceInterview experience={interviewExperience} record={enrichments[interviewExperience.id] ?? null} onChange={updateEnrichment} onClose={() => setInterviewId(null)} />}</main>;
 }
 
 function JobEditorPage({ onUsage }: { onUsage: () => void }) {

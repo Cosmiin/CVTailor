@@ -1,5 +1,8 @@
-import type { BaseCV, CVTemplateId, JobSnapshot, QuotaState, TailoredCV } from "@cv-maker/shared";
-import { demoCV, tailoredCVSchema } from "@cv-maker/shared";
+import type {
+  BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceInterviewAnswer,
+  JobSnapshot, QuotaState, TailoredCV,
+} from "@cv-maker/shared";
+import { demoCV, experienceEnrichmentSchema, experienceFingerprint, tailoredCVSchema } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 export type JobRecord = JobSnapshot & {
@@ -11,7 +14,7 @@ export type JobRecord = JobSnapshot & {
 };
 
 const STORE = "cv-maker-demo";
-type DemoStore = { baseCV: BaseCV; jobs: JobRecord[]; limit: number };
+type DemoStore = { baseCV: BaseCV; jobs: JobRecord[]; limit: number; enrichments?: Record<string, ExperienceEnrichment> };
 
 const readDemo = (): DemoStore => {
   const raw = localStorage.getItem(STORE);
@@ -23,12 +26,15 @@ const readDemo = (): DemoStore => {
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
 const functionErrorMessage = async (error: unknown, data: any, fallback: string) => {
-  if (data?.error) return String(data.error);
+  const friendly = (code: string) => code === "stale_experience_contexts"
+    ? "Role context needs confirmation in Base CV before tailoring."
+    : code;
+  if (data?.error) return friendly(String(data.error));
   const response = (error as { context?: Response } | null)?.context;
   if (response && typeof response.clone === "function") {
     try {
       const body = await response.clone().json();
-      if (body?.error) return String(body.error);
+      if (body?.error) return friendly(String(body.error));
     } catch { /* The gateway did not return JSON. */ }
   }
   return error instanceof Error ? error.message : fallback;
@@ -55,6 +61,32 @@ const rowToJob = (row: any): JobRecord => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const rowToEnrichment = (row: any): ExperienceEnrichment => experienceEnrichmentSchema.parse({
+  experienceId: row.experience_id,
+  active: row.active_payload ?? null,
+  draft: row.draft_payload ?? null,
+  pending: row.pending_payload ?? null,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const invokeEnrichment = async (body: Record<string, unknown>) => {
+  const { data, error } = await supabase!.functions.invoke("enrich-experience", { body });
+  if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Experience interview failed."));
+  return data;
+};
+
+const demoQuestions = [
+  ["ownership", "Which responsibilities did you personally own?", ["Planning and prioritization", "Delivery and execution", "Stakeholder alignment", "Not applicable"]],
+  ["methods", "Which working practices did you use regularly?", ["Agile delivery", "Process improvement", "Data-informed decisions", "Not applicable"]],
+  ["tools", "What best describes your use of tools and technology?", ["Automation workflows", "AI-assisted delivery", "Analytics and reporting", "Not applicable"]],
+  ["scope", "What was the scope of your work?", ["Individual contributor", "Cross-functional leadership", "Team management", "Not applicable"]],
+  ["outcomes", "What kind of outcomes did your work create?", ["Faster delivery", "Clearer decisions", "Improved customer experience", "Not applicable"]],
+].map(([id, prompt, labels], index) => ({
+  id: `q${index + 1}-${id}`, prompt: String(prompt), type: index === 0 ? "multiple" as const : "single" as const,
+  options: (labels as string[]).map((label, optionIndex) => ({ id: `q${index + 1}-o${optionIndex + 1}`, label })), rationale: "Adds useful context that is often missing from a CV.",
+}));
 
 export const dataApi = {
   async getBaseCV(): Promise<BaseCV | null> {
@@ -91,6 +123,101 @@ export const dataApi = {
       user_id: userData.user.id, document: cv, ...(sourcePath ? { source_path: sourcePath, source_name: file?.name } : {}),
     });
     if (error) throw error;
+  },
+
+  async listExperienceEnrichments(): Promise<ExperienceEnrichment[]> {
+    if (!isSupabaseConfigured) return Object.values(readDemo().enrichments ?? {});
+    const { data, error } = await supabase!.from("experience_enrichments").select("*").order("updated_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(rowToEnrichment);
+  },
+
+  async startExperienceInterview(experienceId: string): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const experience = store.baseCV.experience.find((item) => item.id === experienceId);
+      if (!experience) throw new Error("Experience not found.");
+      const now = new Date().toISOString();
+      const record = experienceEnrichmentSchema.parse({ experienceId, active: store.enrichments?.[experienceId]?.active ?? null, pending: null, createdAt: store.enrichments?.[experienceId]?.createdAt ?? now, updatedAt: now, draft: {
+        schemaVersion: 1, sourceFingerprint: experienceFingerprint(experience), questions: demoQuestions,
+        answers: [], currentIndex: 0, startedAt: now, updatedAt: now,
+      } });
+      store.enrichments = { ...(store.enrichments ?? {}), [experienceId]: record }; writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "start", experienceId, requestKey: crypto.randomUUID() });
+    return rowToEnrichment(data.record);
+  },
+
+  async saveExperienceAnswer(experienceId: string, answer: ExperienceInterviewAnswer, currentIndex: number): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId]; if (!record?.draft) throw new Error("Interview draft not found.");
+      record.draft = { ...record.draft, answers: [...record.draft.answers.filter((item) => item.questionId !== answer.questionId), answer], currentIndex, updatedAt: new Date().toISOString() };
+      record.updatedAt = new Date().toISOString(); store.enrichments![experienceId] = record; writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "save-draft", experienceId, answer, currentIndex });
+    return rowToEnrichment(data.record);
+  },
+
+  async synthesizeExperience(experienceId: string): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId]; if (!record?.draft) throw new Error("Interview draft not found.");
+      const labels = record.draft.answers.flatMap((answer) => {
+        const question = record.draft!.questions.find((item) => item.id === answer.questionId);
+        return question?.options.filter((option) => answer.selectedOptionIds.includes(option.id)).map((option) => option.label) ?? [];
+      }).filter((label) => label !== "Not applicable");
+      const names = ["Role Ownership", "Process Improvement", "Stakeholder Alignment", "AI-Assisted Delivery", "Outcome Focus"];
+      record.pending = { schemaVersion: 1, overview: `Expanded context based on ${record.draft.answers.length} interview answers.`, responsibilities: labels.slice(0, 3), methods: labels.slice(1, 4), tools: labels.filter((label) => /AI|Automation|Analytics/i.test(label)), scope: labels.filter((label) => /leadership|management|contributor/i.test(label)), domains: [], outcomes: labels.slice(-3), skills: names.map((name, index) => ({ id: `skill-${index + 1}`, name, evidence: labels[index] ?? "Confirmed by the candidate during the role interview.", sourceQuestionIds: [record.draft!.questions[Math.min(index, record.draft!.questions.length - 1)].id] })) };
+      record.updatedAt = new Date().toISOString(); store.enrichments![experienceId] = record; writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "synthesize", experienceId, requestKey: crypto.randomUUID() });
+    return rowToEnrichment(data.record);
+  },
+
+  async approveExperienceContext(experienceId: string, context: ExperienceContext): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId]; if (!record?.draft) throw new Error("Interview draft not found.");
+      record.active = { sourceFingerprint: record.draft.sourceFingerprint, context, questions: record.draft.questions, answers: record.draft.answers, approvedAt: new Date().toISOString() };
+      record.draft = null; record.pending = null; record.updatedAt = new Date().toISOString(); store.enrichments![experienceId] = record; writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "approve", experienceId, context });
+    return rowToEnrichment(data.record);
+  },
+
+  async confirmExperienceContext(experienceId: string): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId]; const experience = store.baseCV.experience.find((item) => item.id === experienceId);
+      if (!record?.active || !experience) throw new Error("Experience context not found.");
+      record.active = { ...record.active, sourceFingerprint: experienceFingerprint(experience), approvedAt: new Date().toISOString() }; record.updatedAt = new Date().toISOString(); writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "confirm-current", experienceId }); return rowToEnrichment(data.record);
+  },
+
+  async updateExperienceContext(experienceId: string, context: ExperienceContext): Promise<ExperienceEnrichment> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId]; if (!record?.active) throw new Error("Experience context not found.");
+      record.active = { ...record.active, context }; record.updatedAt = new Date().toISOString(); writeDemo(store); return record;
+    }
+    const data = await invokeEnrichment({ action: "update-active", experienceId, context }); return rowToEnrichment(data.record);
+  },
+
+  async discardExperienceDraft(experienceId: string): Promise<ExperienceEnrichment | null> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const record = store.enrichments?.[experienceId] ?? null;
+      if (record) { record.draft = null; record.pending = null; record.updatedAt = new Date().toISOString(); writeDemo(store); } return record;
+    }
+    const data = await invokeEnrichment({ action: "discard-draft", experienceId }); return data.record ? rowToEnrichment(data.record) : null;
+  },
+
+  async deleteExperienceContext(experienceId: string): Promise<void> {
+    if (!isSupabaseConfigured) { const store = readDemo(); if (store.enrichments) delete store.enrichments[experienceId]; writeDemo(store); return; }
+    await invokeEnrichment({ action: "delete", experienceId });
+  },
+
+  async pruneExperienceContexts(): Promise<void> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const ids = new Set(store.baseCV.experience.map((item) => item.id));
+      store.enrichments = Object.fromEntries(Object.entries(store.enrichments ?? {}).filter(([id]) => ids.has(id))); writeDemo(store); return;
+    }
+    await invokeEnrichment({ action: "prune", experienceId: "prune" });
   },
 
   async listJobs(): Promise<JobRecord[]> {
