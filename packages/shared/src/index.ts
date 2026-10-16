@@ -211,6 +211,7 @@ export const jobStructuredDataSchema = z.object({
     experience: z.array(z.string().max(1000)).max(30),
     education: z.array(z.string().max(1000)).max(20),
   }),
+  atsKeywords: z.array(z.string().min(1).max(120)).max(20).default([]),
   languages: z.array(z.object({
     name: z.string().max(120),
     level: z.string().max(120).nullable(),

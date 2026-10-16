@@ -99,6 +99,7 @@ export const jobStructuredSchema = z.object({
     experience: z.array(z.string().max(1000)).max(30),
     education: z.array(z.string().max(1000)).max(20),
   }),
+  atsKeywords: z.array(z.string().min(1).max(120)).min(5).max(20),
   languages: z.array(z.object({ name: z.string().max(120), level: z.string().max(120).nullable() })).max(30),
   benefits: z.array(z.string().max(1000)).max(40),
   cleanDescription: z.string().min(1).max(100_000),
@@ -149,6 +150,7 @@ export const jobStructuredJsonSchema = {
       properties: Object.fromEntries(["required", "preferred", "skills", "experience", "education"].map((key) => [key, { type: "array", items: { type: "string" } }])),
       required: ["required", "preferred", "skills", "experience", "education"],
     },
+    atsKeywords: { type: "array", minItems: 5, maxItems: 20, items: { type: "string" } },
     languages: {
       type: "array", items: {
         type: "object", additionalProperties: false,
@@ -162,7 +164,7 @@ export const jobStructuredJsonSchema = {
   },
   required: [
     "schemaVersion", "title", "company", "location", "datePosted", "validThrough", "employmentType",
-    "seniority", "compensation", "summary", "responsibilities", "requirements", "languages", "benefits",
+    "seniority", "compensation", "summary", "responsibilities", "requirements", "atsKeywords", "languages", "benefits",
     "cleanDescription", "sourceLanguage", "warnings",
   ],
 };

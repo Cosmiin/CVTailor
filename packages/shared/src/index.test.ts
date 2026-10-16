@@ -69,6 +69,7 @@ describe("shared CV rules", () => {
         required: ["Experiență în proiecte de digitalizare"], preferred: [],
         skills: ["Comunicare"], experience: [], education: [],
       },
+      atsKeywords: ["Digitalizare", "Analiză procese", "Project management", "Comunicare", "Automatizare"],
       languages: [{ name: "Română", level: "nativ" }, { name: "Engleză", level: "avansat" }],
       benefits: ["Traininguri și cursuri de specializare"],
       cleanDescription: "Specialist Digitalizare la BAUMIT COM în București.",
@@ -78,6 +79,7 @@ describe("shared CV rules", () => {
     expect(job.datePosted).toBeNull();
     expect(job.title).toBe("Specialist Digitalizare");
     expect(job.responsibilities[0]).toContain("Analizează");
+    expect(job.atsKeywords).toContain("Digitalizare");
   });
 
   it("validates a resumable interview and supported context skills", () => {

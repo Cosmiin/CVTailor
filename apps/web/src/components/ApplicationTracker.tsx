@@ -40,7 +40,7 @@ export function ApplicationTracker({
   job: JobRecord;
   cv?: TailoredCV | null;
   onChange: (job: JobRecord) => void;
-  variant?: "panel" | "card";
+  variant?: "panel" | "card" | "row";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -61,7 +61,11 @@ export function ApplicationTracker({
     } finally { setBusy(false); }
   };
 
-  if (!availableCV) return <div className={`application-tracker ${variant} unavailable`}><span>Application tracking</span><small>Tailor a CV first, then record when you apply.</small></div>;
+  if (!availableCV) return <div className={`application-tracker ${variant} unavailable`}><span>{variant === "row" ? "Tailor CV first" : "Application tracking"}</span>{variant !== "row" && <small>Tailor a CV first, then record when you apply.</small>}</div>;
+
+  if (variant === "row" && !applied) return <div className="application-tracker row"><button className="button button-small button-dark" onClick={() => save("applied", dateTimeValue(todayValue()))} disabled={busy}>{busy ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}Mark applied</button>{error && <small className="application-error" role="alert">{error}</small>}</div>;
+
+  if (variant === "row") return <div className="application-tracker row"><select aria-label={`Application status for ${job.title}`} value={job.applicationStatus} onChange={(event) => save(event.target.value as ApplicationStatus)} disabled={busy}>{applicationStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>Changed {readableDate(job.applicationStatusChangedAt)}</small>{error && <small className="application-error" role="alert">{error}</small>}</div>;
 
   if (!applied) return <section className={`application-tracker ${variant}`} aria-label="Application tracking">
     <div className="application-tracker-intro"><span className="application-tracker-icon"><Send size={16} /></span><div><strong>Ready to apply?</strong><small>Save this exact CV and start tracking the response.</small></div></div>
