@@ -555,6 +555,56 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .context-skill-editor > div { display: grid; grid-template-columns: 190px 1fr; gap: 8px; }
 .context-skill-editor textarea { min-height: 46px; }
 
+.job-evidence-modal { width: min(820px, 100%); }
+.job-evidence-modal .interview-header .section-kicker { display: flex; align-items: center; gap: 6px; }
+.job-evidence-modal .interview-body { min-height: 470px; padding: 30px 34px 24px; }
+.job-evidence-modal .interview-body > h3 { max-width: 680px; margin: 16px 0 8px; font-family: var(--serif); font-size: 27px; line-height: 1.15; }
+.job-evidence-modal .interview-body > p { margin: 0 0 20px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.job-evidence-modal .interview-progress { padding: 0 0 20px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 15px; color: var(--muted); font-size: 9px; }
+.job-evidence-modal .interview-progress strong { color: var(--ink); }
+.job-evidence-modal .interview-progress > div { grid-column: 1 / -1; height: 5px; margin: 0; overflow: hidden; border-radius: 8px; background: #dce1dc; display: block; }
+.job-evidence-modal .interview-progress > div i { height: 100%; border-radius: inherit; background: var(--green-2); display: block; }
+.job-evidence-modal .interview-body > label { margin-top: 18px; color: #45514e; display: grid; gap: 6px; font-size: 9px; font-weight: 750; }
+.evidence-role-label { padding: 5px 9px; border-radius: 30px; color: var(--green-2); background: #e4efeb; font-size: 9px; font-weight: 750; }
+.interview-actions { position: sticky; bottom: -24px; margin: 26px -34px -24px; padding: 14px 34px; border-top: 1px solid #d8dcd7; background: rgba(250,249,245,.97); backdrop-filter: blur(8px); display: flex; justify-content: flex-end; gap: 8px; }
+.interview-actions .button:first-child { margin-right: auto; }
+.evidence-choice-list, .proposed-evidence-list, .coverage-list { display: grid; gap: 9px; }
+.evidence-choice { padding: 12px 14px; border: 1px solid #d4d9d4; border-radius: 10px; background: rgba(255,255,255,.72); cursor: pointer; display: flex; align-items: flex-start; gap: 11px; }
+.evidence-choice:has(input:checked) { border-color: #7ca69b; background: #eaf3f0; }
+.evidence-choice input { margin-top: 2px; accent-color: var(--green-2); }
+.evidence-choice > span { display: grid; gap: 4px; }
+.evidence-choice strong { font-size: 10px; }
+.evidence-choice small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.evidence-choice em { color: #8a5f20; font-size: 9px; font-style: normal; font-weight: 700; }
+.proposed-evidence-list article { position: relative; padding: 15px; border: 1px solid #d7dcd7; border-radius: 11px; background: rgba(255,255,255,.72); display: grid; grid-template-columns: 180px 1fr; gap: 10px; }
+.proposed-evidence-list article > small, .proposed-evidence-list article > .evidence-approval { grid-column: 1 / -1; }
+.proposed-evidence-list article > small { color: var(--green-2); font-size: 9px; font-weight: 750; }
+.proposed-evidence-list article label { display: grid; gap: 5px; color: #4d5956; font-size: 9px; font-weight: 700; }
+.proposed-evidence-list .evidence-approval { display: flex; align-items: center; gap: 7px; }
+.coverage-heading { margin-bottom: 22px; display: flex; align-items: flex-start; gap: 14px; }
+.coverage-heading > svg { width: 38px; height: 38px; padding: 9px; border-radius: 11px; color: var(--green-2); background: #dcebe6; }
+.coverage-heading h3 { margin: 5px 0 4px; font-family: var(--serif); font-size: 27px; }
+.coverage-heading p { margin: 0; color: var(--muted); font-size: 10px; }
+.coverage-item { padding: 12px 13px; border: 1px solid #d8dcd7; border-radius: 9px; background: white; display: flex; gap: 10px; }
+.coverage-item > span { width: 22px; height: 22px; border-radius: 50%; color: #59635f; background: #edf0ed; display: grid; place-items: center; flex: none; }
+.coverage-item.supported > span, .coverage-item.newly_confirmed > span { color: var(--green-2); background: #dcebe6; }
+.coverage-item > div { display: grid; gap: 3px; }
+.coverage-item strong { font-size: 10px; }
+.coverage-item small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.coverage-item em { color: var(--green-2); font-size: 8px; font-style: normal; font-weight: 700; }
+.token-note { margin-top: 14px; padding: 10px 12px; border-radius: 8px; color: #41605a; background: #e9f1ee; display: flex; align-items: flex-start; gap: 8px; font-size: 9px; line-height: 1.5; }
+.saved-evidence-panel { margin-top: 12px; padding: 13px; border: 1px solid #c9ddd6; border-radius: 10px; background: #f1f7f4; display: grid; gap: 8px; }
+.saved-evidence-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.saved-evidence-heading span { color: var(--green-2); display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 750; }
+.saved-evidence-heading small { color: var(--muted); font-size: 8px; }
+.saved-evidence-panel article { padding: 10px; border-radius: 8px; background: white; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.saved-evidence-panel article.stale { border: 1px solid #e2c995; background: #fff9ed; }
+.saved-evidence-panel article > div:first-child { display: grid; gap: 3px; }
+.saved-evidence-panel article strong { font-size: 9px; }
+.saved-evidence-panel article span { color: #3f4b48; font-size: 9px; line-height: 1.45; }
+.saved-evidence-panel article small { color: var(--muted); font-size: 8px; }
+.saved-evidence-panel article > div:last-child { display: flex; align-items: center; gap: 4px; }
+
 @media (max-width: 1020px) {
   .hero { grid-template-columns: 1fr; padding-top: 55px; }
   .hero-copy { text-align: center; }
@@ -667,6 +717,10 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
   .interview-copy { padding: 25px 21px 0; }
   .context-review-form { padding: 20px 21px 26px; }
   .context-skill-editor > div { grid-template-columns: 1fr; }
+  .job-evidence-modal .interview-body { min-height: calc(100vh - 92px); padding: 24px 20px 18px; }
+  .interview-actions { bottom: -18px; margin: 24px -20px -18px; padding: 12px 20px; flex-wrap: wrap; }
+  .proposed-evidence-list article { grid-template-columns: 1fr; }
+  .saved-evidence-heading, .saved-evidence-panel article { align-items: flex-start; flex-direction: column; }
   .settings-card, .admin-card { align-items: flex-start; flex-direction: column; }
   .metric-grid { grid-template-columns: 1fr; }
   .limit-control { width: 100%; flex-wrap: wrap; }

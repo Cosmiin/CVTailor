@@ -3,6 +3,7 @@ import { z } from "zod";
 export const SCHEMA_VERSION = 1 as const;
 export const JOB_SCHEMA_VERSION = 2 as const;
 export const EXPERIENCE_ENRICHMENT_SCHEMA_VERSION = 1 as const;
+export const JOB_INTERVIEW_SCHEMA_VERSION = 1 as const;
 
 // Postgres/Supabase timestamps use explicit offsets (for example `+00:00`).
 // Accept those as well as the `Z` form produced by Date#toISOString.
@@ -120,6 +121,89 @@ export const experienceEnrichmentSchema = z.object({
   active: approvedExperienceContextSchema.nullable().default(null),
   draft: experienceInterviewDraftSchema.nullable().default(null),
   pending: experienceContextSchema.nullable().default(null),
+  createdAt: enrichmentTimestampSchema,
+  updatedAt: enrichmentTimestampSchema,
+});
+
+export const evidenceCategorySchema = z.enum([
+  "responsibility", "tool", "method", "leadership", "scope", "domain", "outcome", "skill",
+]);
+
+export const jobRequirementStatusSchema = z.enum([
+  "supported", "unclear", "newly_confirmed", "unanswered", "unsupported",
+]);
+
+export const jobPriorityRequirementSchema = z.object({
+  id: z.string().min(1).max(80),
+  text: z.string().min(1).max(600),
+  atsTerms: z.array(z.string().min(1).max(120)).max(8).default([]),
+  status: jobRequirementStatusSchema,
+  rationale: z.string().max(400).default(""),
+  sourceRefs: z.array(z.string().min(1).max(160)).max(12).default([]),
+});
+
+export const jobInterviewQuestionSchema = z.object({
+  id: z.string().min(1).max(80),
+  targetExperienceId: z.string().min(1).max(120),
+  requirementIds: z.array(z.string().min(1).max(80)).min(1).max(4),
+  prompt: z.string().min(1).max(600),
+  type: z.enum(["single", "multiple", "free_text"]),
+  options: z.array(experienceInterviewOptionSchema).max(8).default([]),
+  rationale: z.string().max(300).default(""),
+});
+
+export const jobInterviewAnswerSchema = z.object({
+  questionId: z.string().min(1).max(80),
+  selectedOptionIds: z.array(z.string().min(1).max(80)).max(8).default([]),
+  note: z.string().max(1500).default(""),
+  skipped: z.boolean().default(false),
+});
+
+export const proposedExperienceEvidenceSchema = z.object({
+  id: z.string().min(1).max(80),
+  experienceId: z.string().min(1).max(120),
+  category: evidenceCategorySchema,
+  label: z.string().max(80).default(""),
+  statement: z.string().min(1).max(300),
+  searchTerms: z.array(z.string().min(1).max(120)).max(12).default([]),
+  sourceQuestionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  approved: z.boolean().default(true),
+});
+
+export const experienceEvidenceSchema = proposedExperienceEvidenceSchema.omit({ approved: true }).extend({
+  id: z.string().uuid(),
+  sourceJobId: z.string().uuid().nullable(),
+  sourceSessionId: z.string().uuid().nullable(),
+  roleFingerprint: z.string().min(1).max(80),
+  confirmedAt: enrichmentTimestampSchema,
+  createdAt: enrichmentTimestampSchema,
+  updatedAt: enrichmentTimestampSchema,
+});
+
+export const jobEvidenceReferenceSchema = z.object({
+  id: z.string().uuid(),
+  experienceId: z.string().min(1).max(120),
+  label: z.string().max(80).default(""),
+  statement: z.string().min(1).max(300),
+  stale: z.boolean().default(false),
+});
+
+export const jobTailoringSessionSchema = z.object({
+  schemaVersion: z.literal(JOB_INTERVIEW_SCHEMA_VERSION),
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  status: z.enum(["questions", "review", "ready", "completed", "discarded", "superseded"]),
+  jobFingerprint: z.string().min(1).max(80),
+  baseFingerprint: z.string().min(1).max(80),
+  requirements: z.array(jobPriorityRequirementSchema).min(4).max(6),
+  questions: z.array(jobInterviewQuestionSchema).max(8).default([]),
+  answers: z.array(jobInterviewAnswerSchema).max(8).default([]),
+  currentIndex: z.number().int().min(0).max(7).default(0),
+  priorEvidence: z.array(jobEvidenceReferenceSchema).max(20).default([]),
+  confirmedEvidenceIds: z.array(z.string().uuid()).max(20).default([]),
+  reconfirmationDone: z.boolean().default(false),
+  proposedEvidence: z.array(proposedExperienceEvidenceSchema).max(8).default([]),
+  approvedEvidenceIds: z.array(z.string().uuid()).max(20).default([]),
   createdAt: enrichmentTimestampSchema,
   updatedAt: enrichmentTimestampSchema,
 });
@@ -286,6 +370,14 @@ export type ExperienceContextSkill = z.infer<typeof experienceContextSkillSchema
 export type ExperienceContext = z.infer<typeof experienceContextSchema>;
 export type ApprovedExperienceContext = z.infer<typeof approvedExperienceContextSchema>;
 export type ExperienceEnrichment = z.infer<typeof experienceEnrichmentSchema>;
+export type EvidenceCategory = z.infer<typeof evidenceCategorySchema>;
+export type JobPriorityRequirement = z.infer<typeof jobPriorityRequirementSchema>;
+export type JobInterviewQuestion = z.infer<typeof jobInterviewQuestionSchema>;
+export type JobInterviewAnswer = z.infer<typeof jobInterviewAnswerSchema>;
+export type ProposedExperienceEvidence = z.infer<typeof proposedExperienceEvidenceSchema>;
+export type ExperienceEvidence = z.infer<typeof experienceEvidenceSchema>;
+export type JobEvidenceReference = z.infer<typeof jobEvidenceReferenceSchema>;
+export type JobTailoringSession = z.infer<typeof jobTailoringSessionSchema>;
 
 export const createId = (prefix = "item") =>
   `${prefix}-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;

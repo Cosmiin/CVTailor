@@ -43,5 +43,8 @@ verify_jwt = true
 [functions.enrich-experience]
 verify_jwt = true
 
+[functions.job-interview]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true

@@ -1,12 +1,13 @@
 import { useRef, type PointerEvent } from "react";
 import {
   ArrowDown, ArrowUp, BookOpen, BriefcaseBusiness, Camera, ChevronRight, FileBadge,
-  FolderKanban, Globe2, Languages, LayoutDashboard, PencilLine, Plus, Sparkles,
+  FolderKanban, Globe2, Languages, LayoutDashboard, PencilLine, Plus, ShieldCheck, Sparkles,
   Trash2, UserRound, X,
 } from "lucide-react";
 import {
   calculateExperienceMonths, createId, formatExperienceDuration, isPresentExperienceDate,
-  toExperienceMonthInput, type BaseCV, type ExperienceEnrichment, type TailoredItemProvenance,
+  experienceFingerprint, toExperienceMonthInput, type BaseCV, type ExperienceEnrichment,
+  type ExperienceEvidence, type TailoredItemProvenance,
 } from "@cv-maker/shared";
 import { prepareProfilePhoto } from "../lib/photo";
 import { ExperienceContextPanel } from "./ExperienceInterview";
@@ -16,9 +17,12 @@ type Props = {
   onChange: (cv: BaseCV) => void;
   baseMode?: boolean;
   enrichments?: Record<string, ExperienceEnrichment>;
+  evidence?: ExperienceEvidence[];
   onOpenInterview?: (experienceId: string) => void;
   onConfirmContext?: (experienceId: string) => void;
   onDeleteContext?: (experienceId: string) => void;
+  onEditEvidence?: (evidenceId: string, input: { label: string; statement: string }) => void;
+  onDeleteEvidence?: (evidenceId: string) => void;
 };
 const verified = (source = "user.edit"): TailoredItemProvenance => ({ status: "verified", sourceRefs: [source] });
 const clampPosition = (value: number) => Math.max(0, Math.min(100, value));
@@ -69,7 +73,7 @@ function PhotoPositioner({ cv, onChange }: Props) {
   ><img ref={imageRef} src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={{ objectPosition: `${positionX}% ${positionY}%`, transform: `scale(${zoom})`, transformOrigin: `${positionX}% ${positionY}%` }} /><span>Drag to center</span></div>;
 }
 
-export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpenInterview, onConfirmContext, onDeleteContext }: Props) {
+export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, evidence = [], onOpenInterview, onConfirmContext, onDeleteContext, onEditEvidence, onDeleteEvidence }: Props) {
   const updateContact = (key: keyof BaseCV["contact"], value: string) => onChange({ ...cv, contact: { ...cv.contact, [key]: value } });
   const moveSection = (index: number, direction: number) => {
     const next = [...cv.sectionOrder]; const target = index + direction;
@@ -105,6 +109,10 @@ export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, onOpe
         <div className="achievement-label">Achievements and responsibilities</div>{item.bullets.map((bullet) => <div className="bullet-edit" key={bullet.id}><span>•</span><textarea rows={2} placeholder="Start with an action and include the result where possible." value={bullet.text} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.map((value) => value.id === bullet.id ? { ...value, text: event.target.value } : value) } : entry) })} /><button className="icon-button" aria-label="Delete bullet" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.filter((value) => value.id !== bullet.id) } : entry) })}><X size={14} /></button></div>)}
         <button className="text-button" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: [...entry.bullets, { id: createId("bullet"), text: "", visible: true, provenance: verified(baseMode ? `base.experience.${itemIndex}` : "user.edit") }] } : entry) })}><Plus size={14} />Add achievement</button>
         {baseMode && onOpenInterview && onConfirmContext && onDeleteContext && <ExperienceContextPanel experience={item} record={enrichments[item.id] ?? null} onOpen={() => onOpenInterview(item.id)} onConfirm={() => onConfirmContext(item.id)} onDelete={() => onDeleteContext(item.id)} />}
+        {baseMode && evidence.some((entry) => entry.experienceId === item.id) && <div className="saved-evidence-panel"><div className="saved-evidence-heading"><span><ShieldCheck size={15} />Job-confirmed evidence</span><small>Private context used only when relevant</small></div>{evidence.filter((entry) => entry.experienceId === item.id).map((entry) => {
+          const stale = entry.roleFingerprint !== experienceFingerprint(item);
+          return <article key={entry.id} className={stale ? "stale" : ""}><div><strong>{entry.label || entry.category}</strong><span>{entry.statement}</span><small>{entry.category}{stale ? " · Role changed — excluded until reconfirmed" : " · Confirmed by you"}</small></div><div><button className="text-button" onClick={() => { const label = window.prompt("Short evidence label", entry.label); if (label === null) return; const statement = window.prompt("Factual evidence statement", entry.statement); if (statement?.trim()) onEditEvidence?.(entry.id, { label, statement }); }}>Edit</button><button className="icon-button danger" aria-label="Delete saved evidence" onClick={() => onDeleteEvidence?.(entry.id)}><Trash2 size={14} /></button></div></article>;
+        })}</div>}
       </article>)}
       <button className="add-card-button" onClick={() => onChange({ ...cv, experience: [...cv.experience, { id: createId("experience"), company: "", role: "", location: "", startDate: "", endDate: "", visible: true, bullets: [{ id: createId("bullet"), text: "", visible: true, provenance: verified("user.edit") }] }] })}><Plus size={15} />Add experience</button>
     </div></details>

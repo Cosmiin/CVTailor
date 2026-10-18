@@ -1,8 +1,12 @@
 import type {
-  ApplicationStatus, BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceInterviewAnswer,
-  JobSnapshot, QuotaState, TailoredCV,
+  ApplicationStatus, BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceEvidence,
+  ExperienceInterviewAnswer, JobInterviewAnswer, JobSnapshot, JobTailoringSession, ProposedExperienceEvidence,
+  QuotaState, TailoredCV,
 } from "@cv-maker/shared";
-import { demoCV, experienceEnrichmentSchema, experienceFingerprint, exportableCV, tailoredCVSchema } from "@cv-maker/shared";
+import {
+  demoCV, experienceEnrichmentSchema, experienceEvidenceSchema, experienceFingerprint, exportableCV,
+  jobTailoringSessionSchema, tailoredCVSchema,
+} from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 export type JobRecord = JobSnapshot & {
@@ -18,7 +22,12 @@ export type JobRecord = JobSnapshot & {
 };
 
 const STORE = "cv-maker-demo";
-type DemoStore = { baseCV: BaseCV; jobs: JobRecord[]; limit: number; enrichments?: Record<string, ExperienceEnrichment> };
+type DemoStore = {
+  baseCV: BaseCV; jobs: JobRecord[]; limit: number;
+  enrichments?: Record<string, ExperienceEnrichment>;
+  evidence?: ExperienceEvidence[];
+  jobSessions?: Record<string, JobTailoringSession>;
+};
 
 const readDemo = (): DemoStore => {
   const raw = localStorage.getItem(STORE);
@@ -37,6 +46,12 @@ const functionErrorMessage = async (error: unknown, data: any, fallback: string)
     tailored_cv_skill_rules_failed: "AI could not produce valid short skills. Please try again.",
     quota_exhausted: "You have used all tailoring runs available this month.",
     account_disabled: "This account is currently disabled.",
+    job_interview_rate_limited: "You have reached the short-term interview limit. Please try again in an hour.",
+    experience_ai_rate_limited: "You have reached the short-term interview limit. Please try again in an hour.",
+    job_interview_busy: "Another evidence check is already running. Please wait a moment and try again.",
+    experience_ai_busy: "Another evidence check is already running. Please wait a moment and try again.",
+    job_interview_not_ready: "Complete the evidence review before generating your CV.",
+    job_interview_answers_incomplete: "Answer or skip each question before reviewing the evidence.",
     "Failed to send a request to the Edge Function": "The tailoring service was interrupted. Please try again.",
   }[code] ?? code.replaceAll("_", " "));
   if (data?.error) return friendly(String(data.error));
@@ -85,9 +100,22 @@ const rowToEnrichment = (row: any): ExperienceEnrichment => experienceEnrichment
   updatedAt: row.updated_at,
 });
 
+const rowToEvidence = (row: any): ExperienceEvidence => experienceEvidenceSchema.parse({
+  id: row.id, experienceId: row.experience_id, category: row.category, label: row.label,
+  statement: row.statement, searchTerms: row.search_terms ?? [], sourceQuestionIds: row.source_question_ids ?? [],
+  sourceJobId: row.source_job_id ?? null, sourceSessionId: row.source_session_id ?? null,
+  roleFingerprint: row.role_fingerprint, confirmedAt: row.confirmed_at, createdAt: row.created_at, updatedAt: row.updated_at,
+});
+
 const invokeEnrichment = async (body: Record<string, unknown>) => {
   const { data, error } = await supabase!.functions.invoke("enrich-experience", { body });
   if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Experience interview failed."));
+  return data;
+};
+
+const invokeJobInterview = async (body: Record<string, unknown>) => {
+  const { data, error } = await supabase!.functions.invoke("job-interview", { body });
+  if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Job evidence interview failed."));
   return data;
 };
 
@@ -237,6 +265,104 @@ export const dataApi = {
     await invokeEnrichment({ action: "prune", experienceId: "prune" });
   },
 
+  async listExperienceEvidence(): Promise<ExperienceEvidence[]> {
+    if (!isSupabaseConfigured) return readDemo().evidence ?? [];
+    const { data, error } = await supabase!.from("experience_evidence").select("*").order("updated_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(rowToEvidence);
+  },
+
+  async updateExperienceEvidence(evidenceId: string, input: { label: string; statement: string }): Promise<void> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const item = store.evidence?.find((entry) => entry.id === evidenceId);
+      if (item) { item.label = input.label; item.statement = input.statement; item.confirmedAt = new Date().toISOString(); item.updatedAt = item.confirmedAt; }
+      writeDemo(store); return;
+    }
+    await invokeJobInterview({ action: "update-evidence", evidenceId, ...input });
+  },
+
+  async deleteExperienceEvidence(evidenceId: string): Promise<void> {
+    if (!isSupabaseConfigured) { const store = readDemo(); store.evidence = (store.evidence ?? []).filter((item) => item.id !== evidenceId); writeDemo(store); return; }
+    await invokeJobInterview({ action: "delete-evidence", evidenceId });
+  },
+
+  async deleteRoleEvidence(experienceId: string): Promise<void> {
+    if (!isSupabaseConfigured) { const store = readDemo(); store.evidence = (store.evidence ?? []).filter((item) => item.experienceId !== experienceId); writeDemo(store); return; }
+    await invokeJobInterview({ action: "delete-role-evidence", experienceId });
+  },
+
+  async getJobInterview(jobId: string): Promise<JobTailoringSession | null> {
+    if (!isSupabaseConfigured) return readDemo().jobSessions?.[jobId] ?? null;
+    const data = await invokeJobInterview({ action: "get", jobId });
+    return data.session ? jobTailoringSessionSchema.parse(data.session) : null;
+  },
+
+  async analyzeJobInterview(jobId: string): Promise<JobTailoringSession> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const existing = store.jobSessions?.[jobId]; if (existing) return existing;
+      const experience = store.baseCV.experience[0]; const now = new Date().toISOString();
+      const requirements = [
+        ["r1", "Role ownership", "unclear"], ["r2", "Relevant tools", "unclear"],
+        ["r3", "Cross-functional delivery", "supported"], ["r4", "Outcome focus", "unsupported"],
+      ].map(([id, text, status]) => ({ id, text, status, atsTerms: [text], rationale: status === "supported" ? "Visible in the CV." : "More evidence may help." }));
+      const questions = experience ? [
+        { id: "q1", targetExperienceId: experience.id, requirementIds: ["r1"], prompt: "Which parts of delivery did you personally own?", type: "multiple" as const, options: ["Planning", "Execution", "Stakeholder alignment", "Not applicable"].map((label, index) => ({ id: `q1-o${index + 1}`, label })), rationale: "Clarifies ownership." },
+        { id: "q2", targetExperienceId: experience.id, requirementIds: ["r2"], prompt: "Which relevant applications or tools did you use in this role?", type: "free_text" as const, options: [], rationale: "Adds supported tool evidence." },
+      ] : [];
+      const session = jobTailoringSessionSchema.parse({ schemaVersion: 1, id: crypto.randomUUID(), jobId, status: questions.length ? "questions" : "ready", jobFingerprint: "demo-job", baseFingerprint: "demo-base", requirements, questions, answers: [], currentIndex: 0, priorEvidence: [], confirmedEvidenceIds: [], reconfirmationDone: true, proposedEvidence: [], approvedEvidenceIds: [], createdAt: now, updatedAt: now });
+      store.jobSessions = { ...(store.jobSessions ?? {}), [jobId]: session }; writeDemo(store); return session;
+    }
+    const data = await invokeJobInterview({ action: "analyze", jobId, requestKey: crypto.randomUUID() });
+    return jobTailoringSessionSchema.parse(data.session);
+  },
+
+  async saveJobInterviewAnswer(jobId: string, sessionId: string, answer: JobInterviewAnswer, currentIndex: number): Promise<JobTailoringSession> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const session = store.jobSessions?.[jobId]; if (!session) throw new Error("Interview not found.");
+      session.answers = [...session.answers.filter((item) => item.questionId !== answer.questionId), answer]; session.currentIndex = currentIndex; session.updatedAt = new Date().toISOString(); writeDemo(store); return session;
+    }
+    const data = await invokeJobInterview({ action: "save-answer", jobId, sessionId, answer, currentIndex });
+    return jobTailoringSessionSchema.parse(data.session);
+  },
+
+  async reconfirmJobEvidence(jobId: string, sessionId: string, evidenceIds: string[]): Promise<JobTailoringSession> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const session = store.jobSessions?.[jobId]; if (!session) throw new Error("Interview not found.");
+      session.confirmedEvidenceIds = evidenceIds; session.reconfirmationDone = true; session.updatedAt = new Date().toISOString(); writeDemo(store); return session;
+    }
+    const data = await invokeJobInterview({ action: "reconfirm", jobId, sessionId, evidenceIds });
+    return jobTailoringSessionSchema.parse(data.session);
+  },
+
+  async synthesizeJobEvidence(jobId: string, sessionId: string): Promise<JobTailoringSession> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const session = store.jobSessions?.[jobId]; if (!session) throw new Error("Interview not found.");
+      session.proposedEvidence = session.answers.filter((answer) => !answer.skipped).map((answer, index) => {
+        const question = session.questions.find((item) => item.id === answer.questionId)!;
+        const selected = question.options.filter((item) => answer.selectedOptionIds.includes(item.id)).map((item) => item.label).join(", ");
+        return { id: `e${index + 1}`, experienceId: question.targetExperienceId, category: index ? "tool" as const : "responsibility" as const, label: selected.slice(0, 80), statement: (answer.note || selected).slice(0, 300), searchTerms: selected ? selected.split(", ") : [], sourceQuestionIds: [question.id], approved: true };
+      });
+      session.status = session.proposedEvidence.length ? "review" : "ready"; session.updatedAt = new Date().toISOString(); writeDemo(store); return session;
+    }
+    const data = await invokeJobInterview({ action: "synthesize", jobId, sessionId, requestKey: crypto.randomUUID() });
+    return jobTailoringSessionSchema.parse(data.session);
+  },
+
+  async approveJobEvidence(jobId: string, sessionId: string, evidence: ProposedExperienceEvidence[]): Promise<JobTailoringSession> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const session = store.jobSessions?.[jobId]; if (!session) throw new Error("Interview not found.");
+      const now = new Date().toISOString(); const saved = evidence.filter((item) => item.approved).map((item) => experienceEvidenceSchema.parse({ ...item, id: crypto.randomUUID(), sourceJobId: jobId, sourceSessionId: sessionId, roleFingerprint: experienceFingerprint(store.baseCV.experience.find((role) => role.id === item.experienceId)!), confirmedAt: now, createdAt: now, updatedAt: now }));
+      store.evidence = [...(store.evidence ?? []), ...saved]; session.approvedEvidenceIds = saved.map((item) => item.id); session.proposedEvidence = evidence; session.status = "ready"; session.updatedAt = now; writeDemo(store); return session;
+    }
+    const data = await invokeJobInterview({ action: "approve", jobId, sessionId, evidence });
+    return jobTailoringSessionSchema.parse(data.session);
+  },
+
+  async discardJobInterview(jobId: string, sessionId: string): Promise<void> {
+    if (!isSupabaseConfigured) { const store = readDemo(); if (store.jobSessions) delete store.jobSessions[jobId]; writeDemo(store); return; }
+    await invokeJobInterview({ action: "discard", jobId, sessionId });
+  },
+
   async listJobs(): Promise<JobRecord[]> {
     if (!isSupabaseConfigured) return readDemo().jobs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const { data, error } = await supabase!.from("jobs").select("*").order("updated_at", { ascending: false });
@@ -269,7 +395,7 @@ export const dataApi = {
     return rowToJob(data.job);
   },
 
-  async tailorJob(job: JobRecord, templateId: CVTemplateId): Promise<TailoredCV> {
+  async tailorJob(job: JobRecord, templateId: CVTemplateId, sessionId?: string): Promise<TailoredCV> {
     if (!isSupabaseConfigured) {
       const store = readDemo();
       const skill = { id: "inferred-ai", text: "Experimentation strategy", visible: true, provenance: { status: "inferred_unconfirmed" as const, sourceRefs: ["job.description"], rationale: "The role emphasizes experimentation; confirm that this reflects your experience." } };
@@ -280,7 +406,7 @@ export const dataApi = {
     }
     const idempotencyKey = crypto.randomUUID();
     const { data, error } = await supabase!.functions.invoke("tailor-cv", {
-      body: { jobId: job.id, templateId, idempotencyKey },
+      body: { jobId: job.id, templateId, sessionId, idempotencyKey },
       headers: { "idempotency-key": idempotencyKey },
     });
     if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));

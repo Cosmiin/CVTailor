@@ -351,3 +351,106 @@ export const experienceContextJsonSchema = {
   },
   required: ["schemaVersion", "overview", "responsibilities", "methods", "tools", "scope", "domains", "outcomes", "skills"],
 };
+
+export const evidenceCategorySchema = z.enum([
+  "responsibility", "tool", "method", "leadership", "scope", "domain", "outcome", "skill",
+]);
+
+export const jobPriorityRequirementSchema = z.object({
+  id: z.string().min(1).max(80),
+  text: z.string().min(1).max(600),
+  atsTerms: z.array(z.string().min(1).max(120)).max(8),
+  status: z.enum(["supported", "unclear", "newly_confirmed", "unanswered", "unsupported"]),
+  rationale: z.string().max(400),
+  sourceRefs: z.array(z.string().min(1).max(160)).max(12),
+});
+
+export const jobInterviewQuestionSchema = z.object({
+  id: z.string().min(1).max(80),
+  targetExperienceId: z.string().min(1).max(120),
+  requirementIds: z.array(z.string().min(1).max(80)).min(1).max(4),
+  prompt: z.string().min(1).max(600),
+  type: z.enum(["single", "multiple", "free_text"]),
+  options: z.array(experienceInterviewOptionSchema).max(8),
+  rationale: z.string().max(300),
+});
+
+export const jobInterviewAnswerSchema = z.object({
+  questionId: z.string().min(1).max(80),
+  selectedOptionIds: z.array(z.string().min(1).max(80)).max(8),
+  note: z.string().max(1500),
+  skipped: z.boolean(),
+});
+
+export const proposedExperienceEvidenceSchema = z.object({
+  id: z.string().min(1).max(80),
+  experienceId: z.string().min(1).max(120),
+  category: evidenceCategorySchema,
+  label: z.string().max(80),
+  statement: z.string().min(1).max(300),
+  searchTerms: z.array(z.string().min(1).max(120)).max(12),
+  sourceQuestionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
+  approved: z.boolean(),
+});
+
+export const jobInterviewAnalysisSchema = z.object({
+  requirements: z.array(jobPriorityRequirementSchema).min(4).max(6),
+  questions: z.array(jobInterviewQuestionSchema).max(8),
+});
+
+export const jobEvidenceSynthesisSchema = z.object({
+  requirements: z.array(jobPriorityRequirementSchema).min(4).max(6),
+  proposedEvidence: z.array(proposedExperienceEvidenceSchema).max(8),
+});
+
+const jobRequirementJson = {
+  type: "object", additionalProperties: false,
+  properties: {
+    id: { type: "string" }, text: { type: "string" },
+    atsTerms: { type: "array", items: { type: "string" } },
+    status: { type: "string", enum: ["supported", "unclear", "newly_confirmed", "unanswered", "unsupported"] },
+    rationale: { type: "string" }, sourceRefs: { type: "array", items: { type: "string" } },
+  },
+  required: ["id", "text", "atsTerms", "status", "rationale", "sourceRefs"],
+};
+
+const jobQuestionJson = {
+  type: "object", additionalProperties: false,
+  properties: {
+    id: { type: "string" }, targetExperienceId: { type: "string" },
+    requirementIds: { type: "array", items: { type: "string" } }, prompt: { type: "string" },
+    type: { type: "string", enum: ["single", "multiple", "free_text"] },
+    options: { type: "array", items: interviewOptionJson }, rationale: { type: "string" },
+  },
+  required: ["id", "targetExperienceId", "requirementIds", "prompt", "type", "options", "rationale"],
+};
+
+const proposedEvidenceJson = {
+  type: "object", additionalProperties: false,
+  properties: {
+    id: { type: "string" }, experienceId: { type: "string" },
+    category: { type: "string", enum: ["responsibility", "tool", "method", "leadership", "scope", "domain", "outcome", "skill"] },
+    label: { type: "string" }, statement: { type: "string" },
+    searchTerms: { type: "array", items: { type: "string" } },
+    sourceQuestionIds: { type: "array", items: { type: "string" } }, approved: { type: "boolean" },
+  },
+  required: ["id", "experienceId", "category", "label", "statement", "searchTerms", "sourceQuestionIds", "approved"],
+};
+
+export const jobInterviewAnalysisJsonSchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    requirements: { type: "array", minItems: 4, maxItems: 6, items: jobRequirementJson },
+    questions: { type: "array", maxItems: 8, items: jobQuestionJson },
+  },
+  required: ["requirements", "questions"],
+};
+
+export const jobEvidenceSynthesisJsonSchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    requirements: { type: "array", minItems: 4, maxItems: 6, items: jobRequirementJson },
+    proposedEvidence: { type: "array", maxItems: 8, items: proposedEvidenceJson },
+  },
+  required: ["requirements", "proposedEvidence"],
+};

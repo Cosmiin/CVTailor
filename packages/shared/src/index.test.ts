@@ -1,10 +1,44 @@
 import { describe, expect, it } from "vitest";
+import { budgetEvidenceItems, selectRelevantExperienceEvidence } from "../../../supabase/functions/_shared/evidence-ranking";
 import {
   applicationStatusSchema, calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
-  exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims, jobStructuredDataSchema, normalizeText,
+  experienceEvidenceSchema, exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims,
+  jobInterviewAnswerSchema, jobTailoringSessionSchema, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
 describe("shared CV rules", () => {
+  it("validates skippable job interviews and caps them at eight questions", () => {
+    const now = new Date().toISOString();
+    const question = { id: "q1", targetExperienceId: "role-1", requirementIds: ["r1"], prompt: "Which tool did you use?", type: "free_text" as const, options: [], rationale: "Clarifies a required tool." };
+    const base = { schemaVersion: 1 as const, id: "11111111-1111-4111-8111-111111111111", jobId: "22222222-2222-4222-8222-222222222222", status: "questions" as const, jobFingerprint: "job", baseFingerprint: "base", requirements: [1, 2, 3, 4].map((index) => ({ id: `r${index}`, text: `Requirement ${index}`, status: "unclear" as const, atsTerms: [], rationale: "Needs evidence." })), questions: Array.from({ length: 8 }, (_, index) => ({ ...question, id: `q${index + 1}` })), answers: [], currentIndex: 0, priorEvidence: [], confirmedEvidenceIds: [], reconfirmationDone: true, proposedEvidence: [], approvedEvidenceIds: [], createdAt: now, updatedAt: now };
+    expect(jobTailoringSessionSchema.parse(base).questions).toHaveLength(8);
+    expect(jobTailoringSessionSchema.safeParse({ ...base, questions: [...base.questions, { ...question, id: "q9" }] }).success).toBe(false);
+    expect(jobInterviewAnswerSchema.parse({ questionId: "q1", skipped: true }).skipped).toBe(true);
+  });
+
+  it("limits reusable evidence statements and keeps audit references", () => {
+    const now = new Date().toISOString();
+    const valid = { id: "33333333-3333-4333-8333-333333333333", experienceId: "role-1", category: "tool" as const, label: "Power BI", statement: "Built and maintained operational dashboards in Power BI.", searchTerms: ["Power BI", "business intelligence"], sourceQuestionIds: ["q2"], sourceJobId: "22222222-2222-4222-8222-222222222222", sourceSessionId: "11111111-1111-4111-8111-111111111111", roleFingerprint: "v1-role", confirmedAt: now, createdAt: now, updatedAt: now };
+    expect(experienceEvidenceSchema.parse(valid).sourceQuestionIds).toEqual(["q2"]);
+    expect(experienceEvidenceSchema.safeParse({ ...valid, statement: "x".repeat(301) }).success).toBe(false);
+  });
+
+  it("shortlists 200 historical facts without replaying their raw answers", () => {
+    const roles = new Map(Array.from({ length: 5 }, (_, index) => [`role-${index + 1}`, { id: `role-${index + 1}`, role: "Operations Lead" }]));
+    const history = Array.from({ length: 200 }, (_, index) => ({
+      id: `e-${index}`, experience_id: `role-${(index % 5) + 1}`, label: index < 50 ? "Power BI" : "Unrelated",
+      statement: index < 50 ? `Built Power BI dashboard ${index}.` : `Historical answer ${index}.`,
+      search_terms: index < 50 ? ["Power BI", "business intelligence"] : ["unrelated"],
+      role_fingerprint: "current", updated_at: new Date(2026, 0, (index % 28) + 1).toISOString(),
+    }));
+    const selected = selectRelevantExperienceEvidence(history, roles, { title: "Power BI Operations Lead", requirements: ["Business intelligence dashboards"] }, () => "current");
+    expect(selected.length).toBeLessThanOrEqual(20);
+    for (const roleId of roles.keys()) expect(selected.filter((item) => item.item.experience_id === roleId).length).toBeLessThanOrEqual(6);
+    const compact = budgetEvidenceItems(selected.map(({ item }) => ({ id: item.id, statement: item.statement, searchTerms: item.search_terms })), 6000);
+    expect(JSON.stringify(compact).length).toBeLessThanOrEqual(6000);
+    expect(JSON.stringify(compact)).not.toContain("rawQuestion");
+  });
+
   it("accepts only supported application stages", () => {
     expect(applicationStatusSchema.parse("interviewing")).toBe("interviewing");
     expect(applicationStatusSchema.safeParse("ghosted").success).toBe(false);
