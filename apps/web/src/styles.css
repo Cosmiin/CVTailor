@@ -424,11 +424,13 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .photo-editor-preview.is-positionable:focus-visible { outline: 3px solid rgba(44,108,99,.35); outline-offset: 2px; }
 .photo-editor-preview.is-positionable img { will-change: transform, object-position; pointer-events: none; }
 .photo-editor-preview.is-positionable > span { padding: 4px 7px; position: absolute; inset: auto auto 7px; border-radius: 10px; color: #fff; background: rgba(18,43,40,.72); pointer-events: none; font-size: 8px; font-weight: 750; }
+.photo-editor-preview.photo-global-preview { box-shadow: inset 0 0 0 1px rgba(44,108,99,.16); }
 .photo-editor-preview svg { width: 30px; height: 30px; }
 .photo-editor strong { display: block; font-size: 12px; }
 .photo-editor p { margin: 3px 0 10px; color: var(--muted); font-size: 10px; }
 .photo-zoom { max-width: 260px; margin: -2px 0 10px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; color: var(--muted); font-size: 9px; font-weight: 700; }
 .photo-zoom input { min-height: auto; padding: 0; accent-color: var(--green-2); }
+.photo-save-hint { margin-top: 8px; color: var(--green-2); display: flex; align-items: center; gap: 5px; font-size: 8px; font-weight: 750; }
 .inline-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .repeat-list { display: grid; gap: 12px; }
 .repeat-card { padding: 13px; border: 1px solid #e0e1dc; border-radius: 8px; background: #f9f9f5; }
