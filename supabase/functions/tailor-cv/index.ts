@@ -63,17 +63,24 @@ TRUTH AND PROVENANCE
 - Infer a transferable skill only when related candidate evidence strongly implies it. Mark other plausible inferences inferred_unconfirmed with supporting sourceRefs and a concise rationale. Never infer a skill solely because it appears in the job.
 
 TAILORING
-- Identify the job's outcomes, responsibilities, capabilities, and ATS terminology. Use exact job terminology when it truthfully matches the candidate, plus natural closely related variants without keyword stuffing.
-- Keep employment roles but condense older or less relevant experience. Reorder bullets by relevance.
-- Write concise action-led bullets emphasizing contribution, ownership, context, and qualitative results. Keep metrics only when supplied; never estimate them.
+- First identify the job's 4–6 highest-priority requirements. Prioritize the target title, explicit required qualifications, requirements repeated across sections, unusually specific tools or methods, and requirements with stated scale or years. Ignore generic employer language and routine personality adjectives.
+- Map each priority requirement to precise candidate evidence before writing. A job requirement or ATS term is never candidate evidence. Omit unsupported requirements rather than disguising them as transferable experience.
+- Select and reorder the strongest existing evidence before rewriting it. Do not mechanically paraphrase every bullet. Keep employment roles, employers, and dates factual, and condense older or less relevant experience.
+- In the most relevant recent role, make the first two bullets address the strongest supported job priorities whenever that role contains the evidence. Within every other role, put the most relevant evidence first.
+- Write concise action-led bullets emphasizing contribution, ownership, context, and qualitative results. Match the job's ownership verbs only when they accurately describe the candidate's responsibility. Vary sentence structure and avoid repetitive AI-style verbs or cadence.
+- Select supplied metrics according to the job's emphasis: scale for enterprise or high-volume work, time for speed or delivery, financial figures for commercial responsibility, and team size for leadership. Keep metrics only when supplied; never estimate them.
 - Write an energetic, modern summary without first-person pronouns, clichés, unsupported superlatives, or the target company's name.
 
 CORE SKILLS AND ATS
-- Return no more than 10 distinct skills. Every skill must contain one to three words. Use recognizable ATS-friendly names, remove overlap, and avoid vague personality traits.
+- Treat the ordered ATS priority terms as retrieval language from the job, not as permission to claim those qualifications.
+- When a priority term is supported, use the posting's exact spelling naturally once in the most relevant experience or project bullet. Add one common abbreviation or variant in parentheses only when it is widely recognized and useful, for example User Acceptance Testing (UAT). Do not list several near-identical variants.
+- A core skill must be supported by a visible experience bullet, project, certification, education item, or approved experience context. Prefer to make that support explicit in an experience or project bullet; omit a skill that would otherwise exist only as an unsupported keyword in the skills list.
+- Return no more than 10 distinct skills, ordered by the job's priorities and followed by other relevant candidate strengths. Every skill must contain one to three words. Use recognizable ATS-friendly names, remove overlap, and exclude generic traits such as communication, teamwork, willingness to learn, or self-motivation.
+- Do not copy long phrases or sentences from the job description. Do not repeat a keyword unnaturally across the summary, skills, and multiple bullets.
 - Optimize for at most two rendered pages using standard sections, plain text, concise sentences, and conventional terminology.
 - Prefer section order: summary, skills, experience, projects, education, certifications, languages, then custom sections, adjusting only when evidence makes another order more useful.
 
-Before returning, verify schema compliance, unchanged contact data, truthful provenance, no invented facts or metrics, at most 10 one-to-three-word skills, natural ATS wording, concise two-page scope, and preserved seniority.`;
+Before returning, verify schema compliance, unchanged contact data, truthful provenance, no invented facts or metrics, evidence for every listed skill, supported priority terms in relevant bullets, at most 10 one-to-three-word skills, natural ATS wording without stuffing, concise two-page scope, and preserved seniority.`;
 
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
@@ -122,11 +129,12 @@ Deno.serve(async (request) => {
       ...job.structured_data,
       cleanDescription: compactText(job.structured_data?.cleanDescription, 12_000),
     };
+    const atsPriorityTerms = compactList(job.structured_data?.atsKeywords, 15, 120);
     const result = await runStructuredResponse(
       "tailored_cv",
       tailoredJsonSchema,
       tailoringInstructions,
-      `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<job_id>${jobId}</job_id>\n<structured_job_json>\n${JSON.stringify(structuredJob)}\n</structured_job_json>`,
+      `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<job_id>${jobId}</job_id>\n<ordered_ats_priority_terms_json>\n${JSON.stringify(atsPriorityTerms)}\n</ordered_ats_priority_terms_json>\n<structured_job_json>\n${JSON.stringify(structuredJob)}\n</structured_job_json>`,
       { timeoutMs: 110_000 },
     );
     const generatedSkills = Array.isArray((result.value as any)?.skills) ? (result.value as any).skills : [];
