@@ -8,6 +8,7 @@ import {
   jobTailoringSessionSchema, tailoredCVSchema,
 } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
+import { createAiDiagnostics } from "./ai-diagnostics";
 
 export type JobRecord = JobSnapshot & {
   id: string;
@@ -136,27 +137,60 @@ const invokeJobInterview = async (body: Record<string, unknown>) => {
   return data;
 };
 
-const waitForJobInterview = async (initial: any) => {
+const waitForJobInterview = async (
+  initial: any,
+  diagnostics: ReturnType<typeof createAiDiagnostics>,
+) => {
   let data = initial;
   let transientFailures = 0;
+  let pollAttempt = 0;
   const deadline = Date.now() + 20 * 60 * 1000;
   while (data?.pending && data?.runId) {
-    if (Date.now() >= deadline) throw new Error("The evidence check is still running in the background. Return to this job and resume tailoring.");
+    diagnostics.progress({
+      runId: data.runId,
+      stage: data.stage,
+      providerStatus: data.providerStatus ?? data.status,
+      pollAttempt,
+      backendElapsedMs: data.elapsedMs,
+    });
+    if (Date.now() >= deadline) {
+      const timeout = new Error("The evidence check is still running in the background. Return to this job and resume tailoring.");
+      diagnostics.failed(timeout, { runId: data.runId, stage: data.stage, providerStatus: data.providerStatus ?? data.status, pollAttempt });
+      throw timeout;
+    }
     await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
-    const polled = await supabase!.functions.invoke("job-interview", { body: { action: "status", runId: data.runId } });
+    pollAttempt += 1;
+    const slowPoll = window.setTimeout(() => diagnostics.progress({
+      runId: data.runId,
+      stage: "waiting_for_edge_function",
+      providerStatus: data.status,
+      pollAttempt,
+      backendElapsedMs: data.elapsedMs,
+    }), 15_000);
+    const polled = await supabase!.functions.invoke("job-interview", { body: { action: "status", runId: data.runId } })
+      .finally(() => window.clearTimeout(slowPoll));
     if (polled.error || polled.data?.error) {
       const retryable = Boolean(polled.data?.retryable) || polled.error?.message === "Failed to send a request to the Edge Function";
       if (retryable && transientFailures < 4) {
         transientFailures += 1;
-        await new Promise((resolve) => window.setTimeout(resolve, transientFailures * 2_000));
+        const nextRetryMs = transientFailures * 2_000;
+        diagnostics.retry({ runId: data.runId, stage: "polling_edge_function", providerStatus: data.status, pollAttempt, retryNumber: transientFailures, nextRetryMs });
+        await new Promise((resolve) => window.setTimeout(resolve, nextRetryMs));
         continue;
       }
-      throw new Error(await functionErrorMessage(polled.error, polled.data, "Job evidence interview failed."));
+      const failure = new Error(await functionErrorMessage(polled.error, polled.data, "Job evidence interview failed."));
+      diagnostics.failed(failure, { runId: data.runId, stage: "polling_edge_function", providerStatus: data.status, pollAttempt });
+      throw failure;
     }
     transientFailures = 0;
     data = polled.data;
   }
-  if (!data?.session) throw new Error("Job evidence interview did not return a completed session.");
+  if (!data?.session) {
+    const failure = new Error("Job evidence interview did not return a completed session.");
+    diagnostics.failed(failure, { runId: data?.runId, stage: data?.stage, providerStatus: data?.status, pollAttempt });
+    throw failure;
+  }
+  diagnostics.completed({ runId: data.runId, stage: data.stage ?? "evidence_ready", pollAttempt, backendElapsedMs: data.elapsedMs });
   return data;
 };
 
@@ -353,8 +387,16 @@ export const dataApi = {
       const session = jobTailoringSessionSchema.parse({ schemaVersion: 1, id: crypto.randomUUID(), jobId, status: questions.length ? "questions" : "ready", jobFingerprint: "demo-job", baseFingerprint: "demo-base", requirements, questions, answers: [], currentIndex: 0, priorEvidence: [], confirmedEvidenceIds: [], reconfirmationDone: true, proposedEvidence: [], approvedEvidenceIds: [], createdAt: now, updatedAt: now });
       store.jobSessions = { ...(store.jobSessions ?? {}), [jobId]: session }; writeDemo(store); return session;
     }
-    const started = await invokeJobInterview({ action: "analyze", jobId, requestKey: crypto.randomUUID() });
-    const data = await waitForJobInterview(started);
+    const diagnostics = createAiDiagnostics("evidence-analysis", { jobId });
+    diagnostics.started();
+    let started: any;
+    try {
+      started = await invokeJobInterview({ action: "analyze", jobId, requestKey: crypto.randomUUID() });
+    } catch (error) {
+      diagnostics.failed(error, { stage: "starting_evidence_analysis" });
+      throw error;
+    }
+    const data = await waitForJobInterview(started, diagnostics);
     return jobTailoringSessionSchema.parse(data.session);
   },
 
@@ -386,8 +428,16 @@ export const dataApi = {
       });
       session.status = session.proposedEvidence.length ? "review" : "ready"; session.updatedAt = new Date().toISOString(); writeDemo(store); return session;
     }
-    const started = await invokeJobInterview({ action: "synthesize", jobId, sessionId, requestKey: crypto.randomUUID() });
-    const data = await waitForJobInterview(started);
+    const diagnostics = createAiDiagnostics("evidence-synthesis", { jobId });
+    diagnostics.started();
+    let started: any;
+    try {
+      started = await invokeJobInterview({ action: "synthesize", jobId, sessionId, requestKey: crypto.randomUUID() });
+    } catch (error) {
+      diagnostics.failed(error, { stage: "starting_evidence_synthesis" });
+      throw error;
+    }
+    const data = await waitForJobInterview(started, diagnostics);
     return jobTailoringSessionSchema.parse(data.session);
   },
 
@@ -494,32 +544,63 @@ export const dataApi = {
       store.jobs[index] = { ...store.jobs[index], latestTailoredCV: cv, templateId, updatedAt: new Date().toISOString() };
       writeDemo(store); await new Promise((resolve) => setTimeout(resolve, 900)); return cv;
     }
+    const diagnostics = createAiDiagnostics("cv-tailoring", { jobId: job.id });
+    diagnostics.started();
     const idempotencyKey = crypto.randomUUID();
     let { data, error } = await supabase!.functions.invoke("tailor-cv", {
       body: { jobId: job.id, templateId, sessionId, idempotencyKey },
       headers: { "idempotency-key": idempotencyKey },
     });
-    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
+    if (error || data?.error) {
+      const failure = new Error(await functionErrorMessage(error, data, "Tailoring failed."));
+      diagnostics.failed(failure, { stage: "starting_cv_tailoring" });
+      throw failure;
+    }
     const deadline = Date.now() + 20 * 60 * 1000;
     let transientFailures = 0;
+    let pollAttempt = 0;
     while (data?.pending && data?.runId) {
-      if (Date.now() >= deadline) throw new Error("Your CV is still generating in the background. Return to this job and select Generate tailored CV to resume it.");
+      diagnostics.progress({ runId: data.runId, stage: data.stage, providerStatus: data.providerStatus ?? data.status, pollAttempt, backendElapsedMs: data.elapsedMs });
+      if (Date.now() >= deadline) {
+        const timeout = new Error("Your CV is still generating in the background. Return to this job and select Generate tailored CV to resume it.");
+        diagnostics.failed(timeout, { runId: data.runId, stage: data.stage, providerStatus: data.providerStatus ?? data.status, pollAttempt });
+        throw timeout;
+      }
       await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
-      const polled = await supabase!.functions.invoke("tailor-cv", { body: { action: "status", runId: data.runId } });
+      pollAttempt += 1;
+      const slowPoll = window.setTimeout(() => diagnostics.progress({
+        runId: data.runId,
+        stage: "waiting_for_edge_function",
+        providerStatus: data.status,
+        pollAttempt,
+        backendElapsedMs: data.elapsedMs,
+      }), 15_000);
+      const polled = await supabase!.functions.invoke("tailor-cv", { body: { action: "status", runId: data.runId } })
+        .finally(() => window.clearTimeout(slowPoll));
       if (polled.error || polled.data?.error) {
         if (transientFailures < 3) {
           transientFailures += 1;
-          await new Promise((resolve) => window.setTimeout(resolve, transientFailures * 2_000));
+          const nextRetryMs = transientFailures * 2_000;
+          diagnostics.retry({ runId: data.runId, stage: "polling_edge_function", providerStatus: data.status, pollAttempt, retryNumber: transientFailures, nextRetryMs });
+          await new Promise((resolve) => window.setTimeout(resolve, nextRetryMs));
           continue;
         }
-        throw new Error(await functionErrorMessage(polled.error, polled.data, "Tailoring failed."));
+        const failure = new Error(await functionErrorMessage(polled.error, polled.data, "Tailoring failed."));
+        diagnostics.failed(failure, { runId: data.runId, stage: "polling_edge_function", providerStatus: data.status, pollAttempt });
+        throw failure;
       }
       transientFailures = 0;
       data = polled.data;
       error = polled.error;
     }
-    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
-    return tailoredCVSchema.parse(data.cv);
+    if (error || data?.error) {
+      const failure = new Error(await functionErrorMessage(error, data, "Tailoring failed."));
+      diagnostics.failed(failure, { runId: data?.runId, stage: data?.stage, providerStatus: data?.status, pollAttempt });
+      throw failure;
+    }
+    const cv = tailoredCVSchema.parse(data.cv);
+    diagnostics.completed({ runId: data?.runId, stage: data?.stage ?? "cv_ready", pollAttempt, backendElapsedMs: data?.elapsedMs });
+    return cv;
   },
 
   async saveTailoredJob(jobId: string, cv: TailoredCV): Promise<void> {

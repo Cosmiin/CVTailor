@@ -187,6 +187,16 @@ const responseStatus = (code: string) => {
   return 500;
 };
 
+const runElapsedMs = (run: any) => Math.max(0, Date.now() - new Date(run.created_at).getTime());
+const pendingRun = (run: any, runId: string, status: string, stage: string) => ({
+  pending: true,
+  runId,
+  status,
+  stage,
+  providerStatus: run.provider_status ?? status,
+  elapsedMs: runElapsedMs(run),
+});
+
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
   let runId = "";
@@ -207,12 +217,12 @@ Deno.serve(async (request) => {
       if (run.status === "completed") {
         const { data: completedJob } = await client.from("jobs").select("latest_tailored_cv").eq("id", run.job_id).single();
         if (!completedJob?.latest_tailored_cv) throw new Error("tailored_cv_not_found");
-        return json(request, { cv: completedJob.latest_tailored_cv, reused: true });
+        return json(request, { cv: completedJob.latest_tailored_cv, reused: true, runId, stage: "cv_ready", elapsedMs: runElapsedMs(run) });
       }
       if (run.status === "failed") throw new Error(run.error_code || "tailoring_failed");
       if (!run.provider_response_id) {
         const age = Date.now() - new Date(run.created_at).getTime();
-        if (age < 90_000) return json(request, { pending: true, runId, status: "starting" }, 202);
+        if (age < 90_000) return json(request, pendingRun(run, runId, "starting", "starting_ai_request"), 202);
         throw new Error("tailoring_start_interrupted");
       }
 
@@ -220,7 +230,7 @@ Deno.serve(async (request) => {
       const providerStatus = String(payload.status ?? "unknown");
       await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
       if (providerStatus === "queued" || providerStatus === "in_progress") {
-        return json(request, { pending: true, runId, status: providerStatus }, 202);
+        return json(request, { ...pendingRun(run, runId, providerStatus, "waiting_for_ai"), providerStatus }, 202);
       }
       if (providerStatus !== "completed") throw new Error(terminalStatusError(payload));
 
@@ -248,7 +258,7 @@ Deno.serve(async (request) => {
         await admin.from("job_tailoring_sessions").update({ status: "completed", completed_at: new Date().toISOString() })
           .eq("id", source.interviewSession.id).eq("user_id", auth.user.id);
       }
-      return json(request, { cv: parsed });
+      return json(request, { cv: parsed, runId, stage: "cv_ready", elapsedMs: runElapsedMs(run) });
     }
 
     const jobId = String(body.jobId ?? "");
@@ -264,7 +274,7 @@ Deno.serve(async (request) => {
     }
     runId = reservation.runId;
     if (reservation.status === "completed" && source.job.latest_tailored_cv) return json(request, { cv: source.job.latest_tailored_cv, reused: true });
-    if (reservation.reused) return json(request, { pending: true, runId, status: "resuming" }, 202);
+    if (reservation.reused) return json(request, { pending: true, runId, status: "resuming", stage: "resuming_existing_run", providerStatus: reservation.status ?? "resuming" }, 202);
 
     const started = await startStructuredResponse(
       "tailored_cv",
@@ -283,7 +293,7 @@ Deno.serve(async (request) => {
       source_fingerprint: source.sourceFingerprint,
     }).eq("id", runId).eq("user_id", auth.user.id).eq("status", "reserved");
     if (metadataError) throw new Error("tailor_run_save_failed");
-    return json(request, { pending: true, runId, status: started.status || "queued" }, 202);
+    return json(request, { pending: true, runId, status: started.status || "queued", stage: "waiting_for_ai", providerStatus: started.status || "queued", elapsedMs: 0 }, 202);
   } catch (error) {
     const code = error instanceof Error ? error.message : "tailoring_failed";
     const retryablePollFailure = action === "status" && (code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d)$/.test(code));

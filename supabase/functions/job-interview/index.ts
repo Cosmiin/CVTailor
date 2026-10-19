@@ -216,6 +216,16 @@ const responseStatus = (code: string) => {
   return 500;
 };
 
+const runElapsedMs = (run: any) => Math.max(0, Date.now() - new Date(run.created_at).getTime());
+const pendingRun = (run: any, runId: string, status: string, stage: string) => ({
+  pending: true,
+  runId,
+  status,
+  stage,
+  providerStatus: run.provider_status ?? status,
+  elapsedMs: runElapsedMs(run),
+});
+
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
   let client: any; let runId = ""; let action = "";
@@ -231,16 +241,16 @@ Deno.serve(async (request) => {
       if (run.status === "completed") {
         if (!run.session_id) throw new Error("job_interview_not_found");
         const completed = await loadSession(admin, user.id, run.session_id);
-        return json(request, { session: presentSession(completed), reused: true });
+        return json(request, { session: presentSession(completed), reused: true, runId, stage: "evidence_ready", elapsedMs: runElapsedMs(run) });
       }
       if (run.status === "failed") throw new Error(run.failure_code || "job_interview_failed");
       if (run.provider_status === "finalizing") {
         const claimAge = Date.now() - new Date(run.updated_at).getTime();
-        if (claimAge < 120_000) return json(request, { pending: true, runId, status: "finalizing" }, 202);
+        if (claimAge < 120_000) return json(request, pendingRun(run, runId, "finalizing", "validating_and_saving_evidence"), 202);
       }
       if (!run.provider_response_id) {
         const age = Date.now() - new Date(run.created_at).getTime();
-        if (age < 120_000) return json(request, { pending: true, runId, status: "starting" }, 202);
+        if (age < 120_000) return json(request, pendingRun(run, runId, "starting", "starting_ai_request"), 202);
         throw new Error("background_start_interrupted");
       }
 
@@ -249,7 +259,7 @@ Deno.serve(async (request) => {
       if (providerStatus === "queued" || providerStatus === "in_progress") {
         await admin.from("job_interview_ai_runs").update({ provider_status: providerStatus })
           .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
-        return json(request, { pending: true, runId, status: providerStatus }, 202);
+        return json(request, { ...pendingRun(run, runId, providerStatus, "waiting_for_ai"), providerStatus }, 202);
       }
       if (providerStatus !== "completed") {
         await admin.from("job_interview_ai_runs").update({ provider_status: providerStatus })
@@ -263,7 +273,7 @@ Deno.serve(async (request) => {
         : claimQuery.eq("provider_status", run.provider_status);
       const { data: claim, error: claimError } = await claimQuery.select("id").maybeSingle();
       if (claimError) throw new Error("job_interview_finalize_claim_failed");
-      if (!claim) return json(request, { pending: true, runId, status: "finalizing" }, 202);
+      if (!claim) return json(request, pendingRun(run, runId, "finalizing", "validating_and_saving_evidence"), 202);
 
       const result = parseStructuredResponse(provider, run.model);
       let completedRow: any;
@@ -283,8 +293,9 @@ Deno.serve(async (request) => {
 
       await admin.from("job_interview_ai_runs").update({ session_id: completedRow.id })
         .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
-      await completeRun(client, runId, result); runId = "";
-      return json(request, { session: presentSession(completedRow) });
+      await completeRun(client, runId, result);
+      const completedRunId = runId; runId = "";
+      return json(request, { session: presentSession(completedRow), runId: completedRunId, stage: "evidence_ready", elapsedMs: runElapsedMs(run) });
     }
 
     if (action === "update-evidence" || action === "delete-evidence") {
@@ -334,7 +345,7 @@ Deno.serve(async (request) => {
 
       const reservation = await reserve(client, jobId, "analysis", String(body.requestKey ?? crypto.randomUUID()).slice(0, 160));
       runId = reservation.runId;
-      if (reservation.reused) return json(request, { pending: true, runId, status: "resuming" }, 202);
+      if (reservation.reused) return json(request, { pending: true, runId, status: "resuming", stage: "resuming_existing_run", providerStatus: reservation.status ?? "resuming" }, 202);
       const started = await startStructuredResponse(
         "job_evidence_analysis", jobInterviewAnalysisJsonSchema, analysisInstructions, context.input,
         { background: true, timeoutMs: 30_000, metadata: { purpose: "job_evidence_analysis", run_id: runId } },
@@ -345,7 +356,7 @@ Deno.serve(async (request) => {
         model: started.model, source_fingerprint: context.sourceFingerprint,
       }).eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
       if (metadataError) throw new Error("job_interview_run_save_failed");
-      return json(request, { pending: true, runId, status: started.status || "queued" }, 202);
+      return json(request, { pending: true, runId, status: started.status || "queued", stage: "waiting_for_ai", providerStatus: started.status || "queued", elapsedMs: 0 }, 202);
     }
 
     const sessionId = String(body.sessionId ?? ""); const row = await loadSession(admin, user.id, sessionId); const payload = row.payload;
@@ -392,7 +403,7 @@ Deno.serve(async (request) => {
       const context = buildSynthesisContext(row, inputs);
       const reservation = await reserve(client, jobId, "synthesis", String(body.requestKey ?? crypto.randomUUID()).slice(0, 160));
       runId = reservation.runId;
-      if (reservation.reused) return json(request, { pending: true, runId, status: "resuming" }, 202);
+      if (reservation.reused) return json(request, { pending: true, runId, status: "resuming", stage: "resuming_existing_run", providerStatus: reservation.status ?? "resuming" }, 202);
       const started = await startStructuredResponse(
         "job_evidence_synthesis", jobEvidenceSynthesisJsonSchema, synthesisInstructions, context.input,
         { background: true, timeoutMs: 30_000, metadata: { purpose: "job_evidence_synthesis", run_id: runId } },
@@ -403,7 +414,7 @@ Deno.serve(async (request) => {
         session_id: row.id, source_fingerprint: context.sourceFingerprint,
       }).eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
       if (metadataError) throw new Error("job_interview_run_save_failed");
-      return json(request, { pending: true, runId, status: started.status || "queued" }, 202);
+      return json(request, { pending: true, runId, status: started.status || "queued", stage: "waiting_for_ai", providerStatus: started.status || "queued", elapsedMs: 0 }, 202);
     }
 
     if (action === "approve") {
