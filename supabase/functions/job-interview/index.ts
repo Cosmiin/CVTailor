@@ -76,7 +76,15 @@ const reserve = async (client: any, jobId: string, phase: "analysis" | "synthesi
   }
   return { runId: String(data.runId), reused: Boolean(data.reused), status: String(data.status ?? "reserved") };
 };
-const completeRun = (client: any, runId: string, result: any) => client.rpc("complete_job_interview_ai_run", { run_id: runId, model_name: result.model, prompt_tokens: result.inputTokens, completion_tokens: result.outputTokens });
+const completeRun = async (client: any, runId: string, result: any) => {
+  const { error } = await client.rpc("complete_job_interview_ai_run", {
+    run_id: runId,
+    model_name: result.model,
+    prompt_tokens: result.inputTokens,
+    completion_tokens: result.outputTokens,
+  });
+  if (error) throw new Error("job_interview_complete_failed");
+};
 const failRun = (client: any, runId: string, code: string) => client.rpc("fail_job_interview_ai_run", { run_id: runId, failure_code: code });
 
 const loadSession = async (admin: any, userId: string, sessionId: string) => {
@@ -212,7 +220,7 @@ const responseStatus = (code: string) => {
   if (code.includes("not_found")) return 404;
   if (["job_interview_answers_incomplete", "job_interview_source_changed"].includes(code)) return 409;
   if (code === "account_disabled") return 403;
-  if (code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d|slow_down|server_is_overloaded)$/.test(code)) return 503;
+  if (code === "job_interview_complete_failed" || code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d|slow_down|server_is_overloaded)$/.test(code)) return 503;
   return 500;
 };
 
@@ -266,12 +274,7 @@ Deno.serve(async (request) => {
           .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
         throw new Error(terminalStatusError(provider));
       }
-      let claimQuery = admin.from("job_interview_ai_runs").update({ provider_status: "finalizing" })
-        .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
-      claimQuery = run.provider_status === "finalizing"
-        ? claimQuery.eq("updated_at", run.updated_at)
-        : claimQuery.eq("provider_status", run.provider_status);
-      const { data: claim, error: claimError } = await claimQuery.select("id").maybeSingle();
+      const { data: claim, error: claimError } = await client.rpc("claim_job_interview_ai_run", { p_run_id: runId });
       if (claimError) throw new Error("job_interview_finalize_claim_failed");
       if (!claim) return json(request, pendingRun(run, runId, "finalizing", "validating_and_saving_evidence"), 202);
 
@@ -445,7 +448,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     const code = error instanceof Error ? error.message : "job_interview_failed";
     const retryablePollFailure = action === "status" &&
-      (code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d|slow_down|server_is_overloaded)$/.test(code));
+      (code === "job_interview_complete_failed" || code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d|slow_down|server_is_overloaded)$/.test(code));
     if (runId && client && !retryablePollFailure) await failRun(client, runId, code).catch(() => undefined);
     return json(request, { error: code, retryable: retryablePollFailure }, responseStatus(code));
   }

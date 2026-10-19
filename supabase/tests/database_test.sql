@@ -1,5 +1,5 @@
 begin;
-select plan(17);
+select plan(18);
 
 select has_table('public', 'base_cvs', 'base CV table exists');
 select has_table('public', 'jobs', 'jobs table exists');
@@ -17,6 +17,7 @@ select has_column('public', 'job_interview_ai_runs', 'session_id', 'evidence run
 select has_column('public', 'job_interview_ai_runs', 'source_fingerprint', 'evidence runs reject stale results');
 select has_column('public', 'job_interview_ai_runs', 'updated_at', 'evidence runs can recover abandoned finalization claims');
 select has_function('public', 'reserve_job_interview_ai_run_v2', array['uuid', 'text', 'text'], 'concurrent evidence reservation function exists');
+select has_function('public', 'claim_job_interview_ai_run', array['uuid'], 'evidence finalization uses an atomic recoverable claim');
 select results_eq(
   $$ select global_monthly_limit from public.app_settings where singleton = true $$,
   array[5],
