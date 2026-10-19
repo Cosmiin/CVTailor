@@ -8,6 +8,7 @@ type Props = {
   session: JobTailoringSession;
   experiences: BaseCV["experience"];
   busy: boolean;
+  generating?: boolean;
   error: string;
   onClose: () => void;
   onSaveAnswer: (answer: JobInterviewAnswer, currentIndex: number) => Promise<void>;
@@ -27,7 +28,7 @@ const statusLabel = {
 } as const;
 
 export function JobEvidenceInterview({
-  session, experiences, busy, error, onClose, onSaveAnswer, onReconfirm, onSynthesize, onApprove, onGenerate, onDiscard,
+  session, experiences, busy, generating = false, error, onClose, onSaveAnswer, onReconfirm, onSynthesize, onApprove, onGenerate, onDiscard,
 }: Props) {
   const [selectedPrior, setSelectedPrior] = useState<string[]>([]);
   const [answer, setAnswer] = useState<JobInterviewAnswer | null>(null);
@@ -105,7 +106,8 @@ export function JobEvidenceInterview({
         <div className="coverage-heading"><ShieldCheck /><div><span className="section-kicker">Evidence coverage</span><h3>Ready to generate your tailored CV</h3><p>This is a factual coverage review, not a universal ATS score.</p></div></div>
         <div className="coverage-list">{session.requirements.map((item) => <article key={item.id} className={`coverage-item ${item.status}`}><span><Check size={14} /></span><div><strong>{item.text}</strong><small>{statusLabel[item.status]} · {item.rationale}</small>{item.atsTerms.length > 0 && <em>{item.atsTerms.join(" · ")}</em>}</div></article>)}</div>
         <div className="token-note"><ShieldCheck size={15} />Past interview transcripts stay private. Generation receives only compact role summaries and up to 20 relevant approved facts.</div>
-        <div className="interview-actions"><button className="button button-ghost" onClick={onDiscard} disabled={busy}>Discard session</button><button className="button button-primary" onClick={onGenerate} disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}Generate tailored CV</button></div>
+        {generating && <div className="notice success" role="status"><LoaderCircle className="spin" size={16} />Your CV is generating in the background. It will keep running even if the first request would normally time out.</div>}
+        <div className="interview-actions"><button className="button button-ghost" onClick={onDiscard} disabled={busy}>Discard session</button><button className="button button-primary" onClick={onGenerate} disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}{generating ? "Generating in background…" : "Generate tailored CV"}</button></div>
       </div>}
     </section>
   </div>;

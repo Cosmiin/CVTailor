@@ -1,6 +1,6 @@
 import { adminClient, handleOptions, json, requireUser } from "../_shared/http.ts";
 import { tailoredJsonSchema, tailoredSchema } from "../_shared/schema.ts";
-import { runStructuredResponse } from "../_shared/openai.ts";
+import { parseStructuredResponse, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
 
 const normalize = (value: string, limit = 100_000) => value
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ").replace(/\r\n?/g, "\n")
@@ -83,143 +83,212 @@ CORE SKILLS AND ATS
 
 Before returning, verify schema compliance, unchanged contact data, truthful provenance, no invented facts or metrics, evidence for every listed skill, supported priority terms in relevant bullets, at most 10 one-to-three-word skills, natural ATS wording without stuffing, concise two-page scope, and preserved seniority.`;
 
+const hashText = async (value: string) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const loadTailoringSource = async (client: any, admin: any, userId: string, jobId: string, sessionId: string) => {
+  const [{ data: job, error: jobError }, { data: base, error: baseError }, { data: enrichments, error: enrichmentError }] = await Promise.all([
+    client.from("jobs").select("*").eq("id", jobId).single(),
+    client.from("base_cvs").select("document").single(),
+    client.from("experience_enrichments").select("experience_id,active_payload").not("active_payload", "is", null),
+  ]);
+  if (jobError || !job) throw new Error("job_not_found");
+  if (job.parse_status === "pending") throw new Error("job_still_parsing");
+  if (job.parse_status !== "completed" || !job.structured_data) throw new Error("job_parse_failed");
+  if (baseError || !base) throw new Error("base_cv_required");
+  if (enrichmentError) throw new Error("experience_context_load_failed");
+
+  const roleById = new Map((base.document.experience ?? []).map((item: any) => [String(item.id), item]));
+  const activeContexts = (enrichments ?? []).filter((item: any) => item.active_payload && roleById.has(item.experience_id));
+  const staleExperienceIds = activeContexts.filter((item: any) => experienceFingerprint(roleById.get(item.experience_id)) !== item.active_payload.sourceFingerprint)
+    .map((item: any) => item.experience_id);
+  if (staleExperienceIds.length) throw new Error("stale_experience_contexts");
+  const approvedContexts = compactContexts(activeContexts, roleById);
+
+  let interviewSession: any = null;
+  const approvedEvidence: any[] = [];
+  if (sessionId) {
+    const { data: session, error: sessionError } = await admin.from("job_tailoring_sessions").select("*")
+      .eq("id", sessionId).eq("user_id", userId).eq("job_id", jobId).single();
+    if (sessionError || !session) throw new Error("job_interview_not_found");
+    if (session.status !== "ready") throw new Error("job_interview_not_ready");
+    interviewSession = session;
+    const evidenceIds = [...new Set([
+      ...(session.payload?.confirmedEvidenceIds ?? []),
+      ...(session.payload?.approvedEvidenceIds ?? []),
+    ].map(String))].slice(0, 20);
+    if (evidenceIds.length) {
+      const { data: evidenceRows, error: evidenceError } = await admin.from("experience_evidence").select("*")
+        .eq("user_id", userId).in("id", evidenceIds);
+      if (evidenceError) throw new Error("experience_evidence_load_failed");
+      const perRole = new Map<string, number>();
+      let evidenceChars = 2;
+      for (const evidence of evidenceRows ?? []) {
+        const role = roleById.get(String(evidence.experience_id));
+        if (!role || experienceFingerprint(role) !== evidence.role_fingerprint) continue;
+        const count = perRole.get(String(evidence.experience_id)) ?? 0;
+        if (count >= 6) continue;
+        const compact = {
+          id: evidence.id,
+          experienceId: evidence.experience_id,
+          category: evidence.category,
+          label: compactText(evidence.label, 90),
+          statement: compactText(evidence.statement, 300),
+          searchTerms: compactList(evidence.search_terms, 12, 80),
+        };
+        const size = JSON.stringify(compact).length + 1;
+        if (evidenceChars + size > 6_000) continue;
+        approvedEvidence.push(compact);
+        evidenceChars += size;
+        perRole.set(String(evidence.experience_id), count + 1);
+      }
+    }
+  }
+
+  const { photo: _privatePhoto, ...cvWithoutPhoto } = base.document;
+  const aiSafeCV = {
+    ...cvWithoutPhoto,
+    contact: { fullName: "", headline: base.document.contact?.headline ?? "", email: "", phone: "", location: "", website: "", linkedin: "" },
+  };
+  const structuredJob = {
+    title: compactText(job.structured_data?.title || job.title, 240),
+    company: job.structured_data?.company,
+    summary: compactText(job.structured_data?.summary, 1_400),
+    cleanDescription: compactText(job.structured_data?.cleanDescription, 4_000),
+    responsibilities: compactList(job.structured_data?.responsibilities, 12, 500),
+    requirements: {
+      required: compactList(job.structured_data?.requirements?.required, 12, 500),
+      preferred: compactList(job.structured_data?.requirements?.preferred, 6, 400),
+      skills: compactList(job.structured_data?.requirements?.skills, 18, 180),
+      experience: compactList(job.structured_data?.requirements?.experience, 8, 350),
+      education: compactList(job.structured_data?.requirements?.education, 5, 300),
+    },
+  };
+  const atsPriorityTerms = compactList(job.structured_data?.atsKeywords, 15, 120);
+  const input = `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<approved_experience_evidence>\n${JSON.stringify(approvedEvidence)}\n</approved_experience_evidence>\n<job_id>${jobId}</job_id>\n<ordered_ats_priority_terms_json>\n${JSON.stringify(atsPriorityTerms)}\n</ordered_ats_priority_terms_json>\n<structured_job_json>\n${JSON.stringify(structuredJob)}\n</structured_job_json>`;
+  return { job, base, interviewSession, input, sourceFingerprint: await hashText(input) };
+};
+
+const terminalStatusError = (payload: any) => {
+  const status = compactText(payload?.status, 40) || "failed";
+  const providerCode = compactText(payload?.error?.code ?? payload?.incomplete_details?.reason, 60);
+  return `openai_${providerCode || status}`;
+};
+
+const responseStatus = (code: string) => {
+  if (code === "authentication_required") return 401;
+  if (code === "quota_exhausted") return 429;
+  if (["job_not_found", "job_interview_not_found", "tailor_run_not_found"].includes(code)) return 404;
+  if (["job_still_parsing", "job_parse_failed", "base_cv_required", "stale_experience_contexts", "job_interview_not_ready", "tailoring_source_changed"].includes(code)) return 409;
+  if (code === "account_disabled") return 403;
+  if (code === "openai_request_failed" || code === "openai_timeout" || /^openai_5\d\d$/.test(code)) return 503;
+  return 500;
+};
+
 Deno.serve(async (request) => {
   const preflight = handleOptions(request); if (preflight) return preflight;
   let runId = "";
   let client: any;
+  let action = "start";
   try {
     const auth = await requireUser(request);
     client = auth.client;
     const admin = adminClient();
     const body = await request.json();
+    action = body.action === "status" ? "status" : "start";
+
+    if (action === "status") {
+      runId = String(body.runId ?? "");
+      const { data: run, error: runError } = await admin.from("tailor_runs").select("*")
+        .eq("id", runId).eq("user_id", auth.user.id).single();
+      if (runError || !run) throw new Error("tailor_run_not_found");
+      if (run.status === "completed") {
+        const { data: completedJob } = await client.from("jobs").select("latest_tailored_cv").eq("id", run.job_id).single();
+        if (!completedJob?.latest_tailored_cv) throw new Error("tailored_cv_not_found");
+        return json(request, { cv: completedJob.latest_tailored_cv, reused: true });
+      }
+      if (run.status === "failed") throw new Error(run.error_code || "tailoring_failed");
+      if (!run.provider_response_id) {
+        const age = Date.now() - new Date(run.created_at).getTime();
+        if (age < 90_000) return json(request, { pending: true, runId, status: "starting" }, 202);
+        throw new Error("tailoring_start_interrupted");
+      }
+
+      const payload = await retrieveStructuredResponse(run.provider_response_id);
+      const providerStatus = String(payload.status ?? "unknown");
+      await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
+      if (providerStatus === "queued" || providerStatus === "in_progress") {
+        return json(request, { pending: true, runId, status: providerStatus }, 202);
+      }
+      if (providerStatus !== "completed") throw new Error(terminalStatusError(payload));
+
+      const source = await loadTailoringSource(client, admin, auth.user.id, run.job_id, run.interview_session_id ?? "");
+      if (run.source_fingerprint && source.sourceFingerprint !== run.source_fingerprint) throw new Error("tailoring_source_changed");
+      const result = parseStructuredResponse(payload, run.model);
+      const generatedSkills = Array.isArray((result.value as any)?.skills) ? (result.value as any).skills : [];
+      if (generatedSkills.length > 10 || generatedSkills.some((skill: any) => String(skill.text ?? "").trim().split(/\s+/).length > 3)) {
+        throw new Error("tailored_cv_skill_rules_failed");
+      }
+      const parsed = tailoredSchema.parse({
+        ...result.value,
+        contact: source.base.document.contact,
+        photo: source.base.document.photo ?? null,
+        jobId: run.job_id,
+        generatedAt: new Date().toISOString(),
+        templateId: run.template_id === "compact" ? "compact" : "clarity",
+      });
+      const { error: saveError } = await client.from("jobs").update({ latest_tailored_cv: parsed, template_id: parsed.templateId }).eq("id", run.job_id);
+      if (saveError) throw new Error("tailored_cv_save_failed");
+      await client.rpc("complete_tailor_run", {
+        run_id: runId, model_name: result.model, prompt_tokens: result.inputTokens, completion_tokens: result.outputTokens,
+      });
+      if (source.interviewSession) {
+        await admin.from("job_tailoring_sessions").update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("id", source.interviewSession.id).eq("user_id", auth.user.id);
+      }
+      return json(request, { cv: parsed });
+    }
+
     const jobId = String(body.jobId ?? "");
     const sessionId = body.sessionId ? String(body.sessionId) : "";
     const idempotencyKey = request.headers.get("idempotency-key") ?? String(body.idempotencyKey ?? crypto.randomUUID());
-    const [{ data: job, error: jobError }, { data: base, error: baseError }, { data: enrichments, error: enrichmentError }] = await Promise.all([
-      client.from("jobs").select("*").eq("id", jobId).single(),
-      client.from("base_cvs").select("document").single(),
-      client.from("experience_enrichments").select("experience_id,active_payload").not("active_payload", "is", null),
-    ]);
-    if (jobError || !job) return json(request, { error: "job_not_found" }, 404);
-    if (job.parse_status === "pending") return json(request, { error: "job_still_parsing" }, 409);
-    if (job.parse_status !== "completed" || !job.structured_data) return json(request, { error: "job_parse_failed" }, 409);
-    if (baseError || !base) return json(request, { error: "base_cv_required" }, 409);
-    if (enrichmentError) return json(request, { error: "experience_context_load_failed" }, 500);
-
-    const roleById = new Map((base.document.experience ?? []).map((item: any) => [String(item.id), item]));
-    const activeContexts = (enrichments ?? []).filter((item: any) => item.active_payload && roleById.has(item.experience_id));
-    const staleExperienceIds = activeContexts.filter((item: any) => experienceFingerprint(roleById.get(item.experience_id)) !== item.active_payload.sourceFingerprint)
-      .map((item: any) => item.experience_id);
-    if (staleExperienceIds.length) return json(request, { error: "stale_experience_contexts", experienceIds: staleExperienceIds }, 409);
-    const approvedContexts = compactContexts(activeContexts, roleById);
-
-    let interviewSession: any = null;
-    let approvedEvidence: any[] = [];
-    if (sessionId) {
-      const { data: session, error: sessionError } = await admin.from("job_tailoring_sessions").select("*")
-        .eq("id", sessionId).eq("user_id", auth.user.id).eq("job_id", jobId).single();
-      if (sessionError || !session) return json(request, { error: "job_interview_not_found" }, 404);
-      if (session.status !== "ready") return json(request, { error: "job_interview_not_ready" }, 409);
-      interviewSession = session;
-      const evidenceIds = [...new Set([
-        ...(session.payload?.confirmedEvidenceIds ?? []),
-        ...(session.payload?.approvedEvidenceIds ?? []),
-      ].map(String))].slice(0, 20);
-      if (evidenceIds.length) {
-        const { data: evidenceRows, error: evidenceError } = await admin.from("experience_evidence").select("*")
-          .eq("user_id", auth.user.id).in("id", evidenceIds);
-        if (evidenceError) return json(request, { error: "experience_evidence_load_failed" }, 500);
-        const perRole = new Map<string, number>();
-        let evidenceChars = 2;
-        for (const evidence of evidenceRows ?? []) {
-          const role = roleById.get(String(evidence.experience_id));
-          if (!role || experienceFingerprint(role) !== evidence.role_fingerprint) continue;
-          const count = perRole.get(String(evidence.experience_id)) ?? 0;
-          if (count >= 6) continue;
-          const compact = {
-            id: evidence.id,
-            experienceId: evidence.experience_id,
-            category: evidence.category,
-            label: compactText(evidence.label, 90),
-            statement: compactText(evidence.statement, 300),
-            searchTerms: compactList(evidence.search_terms, 12, 80),
-          };
-          const size = JSON.stringify(compact).length + 1;
-          if (evidenceChars + size > 6_000) continue;
-          approvedEvidence.push(compact);
-          evidenceChars += size;
-          perRole.set(String(evidence.experience_id), count + 1);
-        }
-      }
-    }
-
-    const { data: reservation, error: reserveError } = await client.rpc("reserve_tailor_run", {
-      target_job_id: jobId, request_key: idempotencyKey,
-    });
+    const source = await loadTailoringSource(client, admin, auth.user.id, jobId, sessionId);
+    const { data: reservation, error: reserveError } = await client.rpc("reserve_tailor_run", { target_job_id: jobId, request_key: idempotencyKey });
     if (reserveError) {
       const message = reserveError.message.includes("quota_exhausted") ? "quota_exhausted" :
         reserveError.message.includes("account_disabled") ? "account_disabled" : "quota_reservation_failed";
-      return json(request, { error: message }, message === "quota_exhausted" ? 429 : 403);
+      throw new Error(message);
     }
     runId = reservation.runId;
-    if (reservation.status === "completed" && job.latest_tailored_cv) return json(request, { cv: job.latest_tailored_cv, reused: true });
+    if (reservation.status === "completed" && source.job.latest_tailored_cv) return json(request, { cv: source.job.latest_tailored_cv, reused: true });
+    if (reservation.reused) return json(request, { pending: true, runId, status: "resuming" }, 202);
 
-    const { photo: _privatePhoto, ...cvWithoutPhoto } = base.document;
-    const aiSafeCV = {
-      ...cvWithoutPhoto,
-      contact: { fullName: "", headline: base.document.contact?.headline ?? "", email: "", phone: "", location: "", website: "", linkedin: "" },
-    };
-    const structuredJob = {
-      title: compactText(job.structured_data?.title || job.title, 240),
-      company: job.structured_data?.company,
-      summary: compactText(job.structured_data?.summary, 1_400),
-      cleanDescription: compactText(job.structured_data?.cleanDescription, 4_000),
-      responsibilities: compactList(job.structured_data?.responsibilities, 12, 500),
-      requirements: {
-        required: compactList(job.structured_data?.requirements?.required, 12, 500),
-        preferred: compactList(job.structured_data?.requirements?.preferred, 6, 400),
-        skills: compactList(job.structured_data?.requirements?.skills, 18, 180),
-        experience: compactList(job.structured_data?.requirements?.experience, 8, 350),
-        education: compactList(job.structured_data?.requirements?.education, 5, 300),
-      },
-    };
-    const atsPriorityTerms = compactList(job.structured_data?.atsKeywords, 15, 120);
-    const result = await runStructuredResponse(
+    const started = await startStructuredResponse(
       "tailored_cv",
       tailoredJsonSchema,
       tailoringInstructions,
-      `<candidate_cv_json>\n${JSON.stringify(aiSafeCV)}\n</candidate_cv_json>\n<approved_experience_contexts>\n${JSON.stringify(approvedContexts)}\n</approved_experience_contexts>\n<approved_experience_evidence>\n${JSON.stringify(approvedEvidence)}\n</approved_experience_evidence>\n<job_id>${jobId}</job_id>\n<ordered_ats_priority_terms_json>\n${JSON.stringify(atsPriorityTerms)}\n</ordered_ats_priority_terms_json>\n<structured_job_json>\n${JSON.stringify(structuredJob)}\n</structured_job_json>`,
-      { timeoutMs: 110_000 },
+      source.input,
+      { background: true, timeoutMs: 30_000, metadata: { purpose: "cv_tailoring", run_id: runId } },
     );
-    const generatedSkills = Array.isArray((result.value as any)?.skills) ? (result.value as any).skills : [];
-    if (generatedSkills.length > 10 || generatedSkills.some((skill: any) => String(skill.text ?? "").trim().split(/\s+/).length > 3)) {
-      throw new Error("tailored_cv_skill_rules_failed");
-    }
-    const parsed = tailoredSchema.parse({
-      ...result.value,
-      contact: base.document.contact,
-      photo: base.document.photo ?? null,
-      jobId,
-      generatedAt: new Date().toISOString(),
-      templateId: body.templateId === "compact" ? "compact" : "clarity",
-    });
-    const { error: saveError } = await client.from("jobs").update({
-      latest_tailored_cv: parsed, template_id: parsed.templateId,
-    }).eq("id", jobId);
-    if (saveError) throw new Error("tailored_cv_save_failed");
-    await client.rpc("complete_tailor_run", {
-      run_id: runId, model_name: result.model, prompt_tokens: result.inputTokens, completion_tokens: result.outputTokens,
-    });
-    if (interviewSession) {
-      await admin.from("job_tailoring_sessions").update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", interviewSession.id).eq("user_id", auth.user.id);
-    }
-    return json(request, { cv: parsed });
+    if (!started.responseId) throw new Error("openai_response_id_missing");
+    const { error: metadataError } = await admin.from("tailor_runs").update({
+      provider_response_id: started.responseId,
+      provider_status: started.status || "queued",
+      model: started.model,
+      template_id: body.templateId === "compact" ? "compact" : "clarity",
+      interview_session_id: sessionId || null,
+      source_fingerprint: source.sourceFingerprint,
+    }).eq("id", runId).eq("user_id", auth.user.id).eq("status", "reserved");
+    if (metadataError) throw new Error("tailor_run_save_failed");
+    return json(request, { pending: true, runId, status: started.status || "queued" }, 202);
   } catch (error) {
     const code = error instanceof Error ? error.message : "tailoring_failed";
-    if (runId && client) {
+    const retryablePollFailure = action === "status" && (code === "openai_request_failed" || code === "openai_timeout" || /^openai_(429|5\d\d)$/.test(code));
+    if (runId && client && !retryablePollFailure) {
       try { await client.rpc("fail_tailor_run", { run_id: runId, failure_code: code }); } catch { /* Preserve the original failure response. */ }
     }
-    return json(request, { error: code }, code === "authentication_required" ? 401 : 500);
+    return json(request, { error: code, retryable: retryablePollFailure }, responseStatus(code));
   }
 });

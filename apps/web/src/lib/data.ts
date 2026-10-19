@@ -43,6 +43,9 @@ const functionErrorMessage = async (error: unknown, data: any, fallback: string)
     stale_experience_contexts: "Role context needs confirmation in Base CV before tailoring.",
     openai_timeout: "Tailoring took too long to complete. Please try again.",
     openai_request_failed: "The AI service could not be reached. Please try again.",
+    tailoring_source_changed: "Your CV or job changed while generation was running. Start tailoring again so the result uses the latest information.",
+    tailoring_start_interrupted: "The background generation could not start. Please try again; no tailoring run was used.",
+    tailoring_background_waiting: "Your CV is still generating in the background. You can close this message and resume from this job later.",
     tailored_cv_skill_rules_failed: "AI could not produce valid short skills. Please try again.",
     quota_exhausted: "You have used all tailoring runs available this month.",
     account_disabled: "This account is currently disabled.",
@@ -405,10 +408,29 @@ export const dataApi = {
       writeDemo(store); await new Promise((resolve) => setTimeout(resolve, 900)); return cv;
     }
     const idempotencyKey = crypto.randomUUID();
-    const { data, error } = await supabase!.functions.invoke("tailor-cv", {
+    let { data, error } = await supabase!.functions.invoke("tailor-cv", {
       body: { jobId: job.id, templateId, sessionId, idempotencyKey },
       headers: { "idempotency-key": idempotencyKey },
     });
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
+    const deadline = Date.now() + 20 * 60 * 1000;
+    let transientFailures = 0;
+    while (data?.pending && data?.runId) {
+      if (Date.now() >= deadline) throw new Error("Your CV is still generating in the background. Return to this job and select Generate tailored CV to resume it.");
+      await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
+      const polled = await supabase!.functions.invoke("tailor-cv", { body: { action: "status", runId: data.runId } });
+      if (polled.error || polled.data?.error) {
+        if (transientFailures < 3) {
+          transientFailures += 1;
+          await new Promise((resolve) => window.setTimeout(resolve, transientFailures * 2_000));
+          continue;
+        }
+        throw new Error(await functionErrorMessage(polled.error, polled.data, "Tailoring failed."));
+      }
+      transientFailures = 0;
+      data = polled.data;
+      error = polled.error;
+    }
     if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Tailoring failed."));
     return tailoredCVSchema.parse(data.cv);
   },

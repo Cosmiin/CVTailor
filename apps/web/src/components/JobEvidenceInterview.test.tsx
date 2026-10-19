@@ -38,4 +38,10 @@ describe("job evidence interview", () => {
     expect(html).toContain("Confirm what is still accurate");
     expect(html).toContain("Role changed");
   });
+
+  it("explains that long CV generation continues in the background", () => {
+    const html = renderToStaticMarkup(<JobEvidenceInterview session={baseSession} experiences={demoCV.experience} busy generating error="" onClose={() => undefined} onSaveAnswer={noop} onReconfirm={noop} onSynthesize={noop} onApprove={noop} onGenerate={noop} onDiscard={noop} />);
+    expect(html).toContain("generating in the background");
+    expect(html).toContain("Generating in background");
+  });
 });
