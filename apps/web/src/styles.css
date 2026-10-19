@@ -308,6 +308,12 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .job-processing small { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .job-processing.failed { border-color: #e4c4bd; background: #fff8f6; }
 .job-processing.failed > div > svg { color: #a04a40; }
+.job-parse-recovery { align-items: flex-start; }
+.job-parse-recovery > div:first-child { max-width: 620px; }
+.job-parse-actions { justify-content: flex-end; flex-wrap: wrap; }
+.job-parse-actions .job-source-link { white-space: nowrap; }
+.manual-job-modal { width: min(720px, 100%); }
+.manual-job-modal textarea { min-height: 280px; line-height: 1.55; resize: vertical; }
 .job-details-lead { padding: 18px 0 15px; display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; }
 .job-details-lead h2 { margin: 4px 0; font-size: 20px; letter-spacing: -.025em; }
 .job-details-lead small { color: var(--muted); font-size: 10px; }

@@ -99,7 +99,7 @@ export const jobStructuredSchema = z.object({
     experience: z.array(z.string().max(1000)).max(30),
     education: z.array(z.string().max(1000)).max(20),
   }),
-  atsKeywords: z.array(z.string().min(1).max(120)).min(5).max(20),
+  atsKeywords: z.array(z.string().min(1).max(120)).max(20),
   languages: z.array(z.object({ name: z.string().max(120), level: z.string().max(120).nullable() })).max(30),
   benefits: z.array(z.string().max(1000)).max(40),
   cleanDescription: z.string().min(1).max(100_000),

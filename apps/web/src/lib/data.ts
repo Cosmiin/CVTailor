@@ -55,6 +55,10 @@ const functionErrorMessage = async (error: unknown, data: any, fallback: string)
     experience_ai_busy: "Another evidence check is already running. Please wait a moment and try again.",
     job_interview_not_ready: "Complete the evidence review before generating your CV.",
     job_interview_answers_incomplete: "Answer or skip each question before reviewing the evidence.",
+    job_title_required: "Add the role title.",
+    job_company_required: "Add the company name.",
+    job_text_too_short: "Add the full job description (at least 80 characters).",
+    job_manual_save_failed: "The manual job details could not be saved. Please try again.",
     "Failed to send a request to the Edge Function": "The tailoring service was interrupted. Please try again.",
   }[code] ?? code.replaceAll("_", " "));
   if (data?.error) return friendly(String(data.error));
@@ -395,6 +399,53 @@ export const dataApi = {
     }
     const { data, error } = await supabase!.functions.invoke("import-job", { body: input });
     if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Could not import this job."));
+    return rowToJob(data.job);
+  },
+
+  async refreshJobParse(jobId: string): Promise<JobRecord> {
+    if (!isSupabaseConfigured) {
+      const job = readDemo().jobs.find((item) => item.id === jobId);
+      if (!job) throw new Error("Job not found.");
+      return job;
+    }
+    const { data, error } = await supabase!.functions.invoke("import-job", { body: { action: "status", jobId } });
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Could not refresh job parsing."));
+    return rowToJob(data.job);
+  },
+
+  async retryJobParse(jobId: string): Promise<JobRecord> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const index = store.jobs.findIndex((item) => item.id === jobId);
+      if (index < 0) throw new Error("Job not found.");
+      store.jobs[index] = { ...store.jobs[index], parseStatus: "completed", parseWarnings: [] };
+      writeDemo(store); return store.jobs[index];
+    }
+    const { data, error } = await supabase!.functions.invoke("import-job", { body: { action: "retry", jobId } });
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Could not retry job parsing."));
+    return rowToJob(data.job);
+  },
+
+  async saveManualJob(jobId: string, input: { title: string; company: string; description: string }): Promise<JobRecord> {
+    if (!isSupabaseConfigured) {
+      const store = readDemo(); const index = store.jobs.findIndex((item) => item.id === jobId);
+      if (index < 0) throw new Error("Job not found.");
+      const current = store.jobs[index];
+      const structuredData = {
+        schemaVersion: 2 as const, title: input.title,
+        company: { displayName: input.company, legalName: null, description: null },
+        location: { original: null, city: null, country: null, remotePolicy: "unknown" as const },
+        datePosted: null, validThrough: null, employmentType: null, seniority: null,
+        compensation: { minimum: null, maximum: null, currency: null, period: null, estimated: false },
+        summary: input.description.slice(0, 1400), responsibilities: [],
+        requirements: { required: [], preferred: [], skills: [], experience: [], education: [] },
+        atsKeywords: [input.title], languages: [], benefits: [], cleanDescription: input.description,
+        sourceLanguage: null, warnings: ["Saved manually after automatic parsing could not complete."],
+      };
+      store.jobs[index] = { ...current, title: input.title, company: input.company, description: input.description, structuredData, parseStatus: "completed", parseWarnings: structuredData.warnings, updatedAt: new Date().toISOString() };
+      writeDemo(store); return store.jobs[index];
+    }
+    const { data, error } = await supabase!.functions.invoke("import-job", { body: { action: "manual", jobId, ...input } });
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Could not save the manual job details."));
     return rowToJob(data.job);
   },
 

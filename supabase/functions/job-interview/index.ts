@@ -41,7 +41,8 @@ const compactJob = (job: any) => {
   const data = job.structured_data ?? {};
   return {
     title: normalize(data.title || job.title, 240), company: normalize(data.company?.displayName || job.company, 240),
-    summary: normalize(data.summary, 1400), atsKeywords: unique(data.atsKeywords ?? [], 15),
+    summary: normalize(data.summary, 1400), cleanDescription: normalize(data.cleanDescription || job.description, 4_000),
+    atsKeywords: unique(data.atsKeywords ?? [], 15),
     responsibilities: (data.responsibilities ?? []).slice(0, 12).map((item: unknown) => normalize(item, 500)),
     required: (data.requirements?.required ?? []).slice(0, 12).map((item: unknown) => normalize(item, 500)),
     preferred: (data.requirements?.preferred ?? []).slice(0, 6).map((item: unknown) => normalize(item, 400)),
