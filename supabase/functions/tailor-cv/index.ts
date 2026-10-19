@@ -88,7 +88,7 @@ const hashText = async (value: string) => {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-const loadTailoringSource = async (client: any, admin: any, userId: string, jobId: string, sessionId: string) => {
+const loadTailoringSource = async (client: any, admin: any, userId: string, jobId: string, sessionId: string, allowCompletedSession = false) => {
   const [{ data: job, error: jobError }, { data: base, error: baseError }, { data: enrichments, error: enrichmentError }] = await Promise.all([
     client.from("jobs").select("*").eq("id", jobId).single(),
     client.from("base_cvs").select("document").single(),
@@ -113,7 +113,7 @@ const loadTailoringSource = async (client: any, admin: any, userId: string, jobI
     const { data: session, error: sessionError } = await admin.from("job_tailoring_sessions").select("*")
       .eq("id", sessionId).eq("user_id", userId).eq("job_id", jobId).single();
     if (sessionError || !session) throw new Error("job_interview_not_found");
-    if (session.status !== "ready") throw new Error("job_interview_not_ready");
+    if (session.status !== "ready" && !(allowCompletedSession && session.status === "completed")) throw new Error("job_interview_not_ready");
     interviewSession = session;
     const evidenceIds = [...new Set([
       ...(session.payload?.confirmedEvidenceIds ?? []),
@@ -224,7 +224,7 @@ Deno.serve(async (request) => {
       }
       if (providerStatus !== "completed") throw new Error(terminalStatusError(payload));
 
-      const source = await loadTailoringSource(client, admin, auth.user.id, run.job_id, run.interview_session_id ?? "");
+      const source = await loadTailoringSource(client, admin, auth.user.id, run.job_id, run.interview_session_id ?? "", true);
       if (run.source_fingerprint && source.sourceFingerprint !== run.source_fingerprint) throw new Error("tailoring_source_changed");
       const result = parseStructuredResponse(payload, run.model);
       const generatedSkills = Array.isArray((result.value as any)?.skills) ? (result.value as any).skills : [];
