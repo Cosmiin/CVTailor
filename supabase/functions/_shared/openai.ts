@@ -14,16 +14,34 @@ const openAIKey = () => {
 const openAIModel = (modelEnv?: string) =>
   (modelEnv ? Deno.env.get(modelEnv) : null) ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-6.1-sol";
 
+const retryDelay = (response: Response, attempt: number) => {
+  const retryAfter = response.headers.get("retry-after");
+  const seconds = retryAfter ? Number(retryAfter) : Number.NaN;
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 8_000);
+  return Math.min(750 * (2 ** attempt) + Math.floor(Math.random() * 250), 5_000);
+};
+
 const requestOpenAI = async (url: string, init: RequestInit, timeoutMs: number) => {
-  try {
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-    if (!response.ok) throw new Error(`openai_${response.status}`);
-    return await response.json();
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("openai_")) throw error;
-    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("openai_timeout");
-    throw new Error("openai_request_failed");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      if (response.ok) return await response.json();
+      const body = await response.json().catch(() => ({}));
+      const providerCode = String(body?.error?.code ?? "");
+      const retryable = (response.status === 429 && providerCode === "slow_down") ||
+        (response.status === 503 && providerCode === "server_is_overloaded");
+      if (retryable && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay(response, attempt)));
+        continue;
+      }
+      throw new Error(`openai_${providerCode || response.status}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("openai_")) throw error;
+      if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("openai_timeout");
+      throw new Error("openai_request_failed");
+    }
   }
+  throw new Error("openai_request_failed");
 };
 
 export const parseStructuredResponse = (payload: any, modelFallback?: string) => {

@@ -179,7 +179,7 @@ const terminalStatusError = (payload: any) => {
 
 const responseStatus = (code: string) => {
   if (code === "authentication_required") return 401;
-  if (code === "quota_exhausted") return 429;
+  if (code === "quota_exhausted" || code === "ai_concurrency_limit") return 429;
   if (["job_not_found", "job_interview_not_found", "tailor_run_not_found"].includes(code)) return 404;
   if (["job_still_parsing", "job_parse_failed", "base_cv_required", "stale_experience_contexts", "job_interview_not_ready", "tailoring_source_changed"].includes(code)) return 409;
   if (code === "account_disabled") return 403;
@@ -258,7 +258,8 @@ Deno.serve(async (request) => {
     const { data: reservation, error: reserveError } = await client.rpc("reserve_tailor_run", { target_job_id: jobId, request_key: idempotencyKey });
     if (reserveError) {
       const message = reserveError.message.includes("quota_exhausted") ? "quota_exhausted" :
-        reserveError.message.includes("account_disabled") ? "account_disabled" : "quota_reservation_failed";
+        reserveError.message.includes("account_disabled") ? "account_disabled" :
+        reserveError.message.includes("concurrency_limit") ? "ai_concurrency_limit" : "quota_reservation_failed";
       throw new Error(message);
     }
     runId = reservation.runId;

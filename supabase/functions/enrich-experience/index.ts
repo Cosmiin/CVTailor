@@ -43,7 +43,7 @@ const reserve = async (client: any, experienceId: string, phase: "questions" | "
   });
   if (error) {
     if (error.message.includes("experience_ai_rate_limited")) throw new Error("experience_ai_rate_limited");
-    if (error.message.includes("experience_ai_busy")) throw new Error("experience_ai_busy");
+    if (error.message.includes("concurrency_limit")) throw new Error("ai_concurrency_limit");
     throw new Error("experience_ai_reservation_failed");
   }
   return String(data);
@@ -240,7 +240,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     const code = error instanceof Error ? error.message : "experience_enrichment_failed";
     if (runId && client) await failRun(client, runId, code).catch(() => undefined);
-    const status = code === "authentication_required" ? 401 : code.includes("rate_limited") ? 429 : code.includes("busy") ? 409 : 500;
+    const status = code === "authentication_required" ? 401 : code.includes("rate_limited") || code === "ai_concurrency_limit" ? 429 : 500;
     return json(request, { error: code }, status);
   }
 });

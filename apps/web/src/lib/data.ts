@@ -38,17 +38,21 @@ const readDemo = (): DemoStore => {
 };
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
-const functionErrorMessage = async (error: unknown, data: any, fallback: string) => {
-  const friendly = (code: string) => ({
+export const friendlyFunctionErrorCode = (code: string) => ({
     stale_experience_contexts: "Role context needs confirmation in Base CV before tailoring.",
     openai_timeout: "Tailoring took too long to complete. Please try again.",
     openai_request_failed: "The AI service could not be reached. Please try again.",
+    openai_slow_down: "The AI service is receiving requests too quickly. Please wait a moment and resume this job.",
+    openai_server_is_overloaded: "The AI service is temporarily overloaded. Your work is saved; try again shortly to resume it.",
     tailoring_source_changed: "Your CV or job changed while generation was running. Start tailoring again so the result uses the latest information.",
     tailoring_start_interrupted: "The background generation could not start. Please try again; no tailoring run was used.",
     tailoring_background_waiting: "Your CV is still generating in the background. You can close this message and resume from this job later.",
+    background_start_interrupted: "The background evidence check could not start. Try again to restart it safely.",
+    job_interview_source_changed: "Your CV, answers, or job changed while the evidence check was running. Start the check again with the latest information.",
     tailored_cv_skill_rules_failed: "AI could not produce valid short skills. Please try again.",
     quota_exhausted: "You have used all tailoring runs available this month.",
     account_disabled: "This account is currently disabled.",
+    ai_concurrency_limit: "Three AI operations are already running for your account. Wait for one to finish, then resume this job.",
     job_interview_rate_limited: "You have reached the short-term interview limit. Please try again in an hour.",
     experience_ai_rate_limited: "You have reached the short-term interview limit. Please try again in an hour.",
     job_interview_busy: "Another evidence check is already running. Please wait a moment and try again.",
@@ -59,17 +63,23 @@ const functionErrorMessage = async (error: unknown, data: any, fallback: string)
     job_company_required: "Add the company name.",
     job_text_too_short: "Add the full job description (at least 80 characters).",
     job_manual_save_failed: "The manual job details could not be saved. Please try again.",
-    "Failed to send a request to the Edge Function": "The tailoring service was interrupted. Please try again.",
-  }[code] ?? code.replaceAll("_", " "));
-  if (data?.error) return friendly(String(data.error));
+    "Failed to send a request to the Edge Function": "The AI service connection was interrupted. Your background work is safe; try again to resume it.",
+  } as Record<string, string>)[code] ?? code.replaceAll("_", " ");
+
+const functionErrorMessage = async (error: unknown, data: any, fallback: string) => {
+  if (data?.error) return friendlyFunctionErrorCode(String(data.error));
   const response = (error as { context?: Response } | null)?.context;
   if (response && typeof response.clone === "function") {
     try {
       const body = await response.clone().json();
-      if (body?.error) return friendly(String(body.error));
+      if (body?.error) {
+        const requestId = response.headers.get("sb-request-id");
+        const message = friendlyFunctionErrorCode(String(body.error));
+        return requestId ? `${message} Reference: ${requestId}` : message;
+      }
     } catch { /* The gateway did not return JSON. */ }
   }
-  return error instanceof Error ? error.message : fallback;
+  return error instanceof Error ? friendlyFunctionErrorCode(error.message) : fallback;
 };
 const rowToJob = (row: any): JobRecord => ({
   schemaVersion: 2,
@@ -123,6 +133,30 @@ const invokeEnrichment = async (body: Record<string, unknown>) => {
 const invokeJobInterview = async (body: Record<string, unknown>) => {
   const { data, error } = await supabase!.functions.invoke("job-interview", { body });
   if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "Job evidence interview failed."));
+  return data;
+};
+
+const waitForJobInterview = async (initial: any) => {
+  let data = initial;
+  let transientFailures = 0;
+  const deadline = Date.now() + 20 * 60 * 1000;
+  while (data?.pending && data?.runId) {
+    if (Date.now() >= deadline) throw new Error("The evidence check is still running in the background. Return to this job and resume tailoring.");
+    await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
+    const polled = await supabase!.functions.invoke("job-interview", { body: { action: "status", runId: data.runId } });
+    if (polled.error || polled.data?.error) {
+      const retryable = Boolean(polled.data?.retryable) || polled.error?.message === "Failed to send a request to the Edge Function";
+      if (retryable && transientFailures < 4) {
+        transientFailures += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, transientFailures * 2_000));
+        continue;
+      }
+      throw new Error(await functionErrorMessage(polled.error, polled.data, "Job evidence interview failed."));
+    }
+    transientFailures = 0;
+    data = polled.data;
+  }
+  if (!data?.session) throw new Error("Job evidence interview did not return a completed session.");
   return data;
 };
 
@@ -319,7 +353,8 @@ export const dataApi = {
       const session = jobTailoringSessionSchema.parse({ schemaVersion: 1, id: crypto.randomUUID(), jobId, status: questions.length ? "questions" : "ready", jobFingerprint: "demo-job", baseFingerprint: "demo-base", requirements, questions, answers: [], currentIndex: 0, priorEvidence: [], confirmedEvidenceIds: [], reconfirmationDone: true, proposedEvidence: [], approvedEvidenceIds: [], createdAt: now, updatedAt: now });
       store.jobSessions = { ...(store.jobSessions ?? {}), [jobId]: session }; writeDemo(store); return session;
     }
-    const data = await invokeJobInterview({ action: "analyze", jobId, requestKey: crypto.randomUUID() });
+    const started = await invokeJobInterview({ action: "analyze", jobId, requestKey: crypto.randomUUID() });
+    const data = await waitForJobInterview(started);
     return jobTailoringSessionSchema.parse(data.session);
   },
 
@@ -351,7 +386,8 @@ export const dataApi = {
       });
       session.status = session.proposedEvidence.length ? "review" : "ready"; session.updatedAt = new Date().toISOString(); writeDemo(store); return session;
     }
-    const data = await invokeJobInterview({ action: "synthesize", jobId, sessionId, requestKey: crypto.randomUUID() });
+    const started = await invokeJobInterview({ action: "synthesize", jobId, sessionId, requestKey: crypto.randomUUID() });
+    const data = await waitForJobInterview(started);
     return jobTailoringSessionSchema.parse(data.session);
   },
 
