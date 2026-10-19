@@ -158,7 +158,8 @@ const waitForJobInterview = async (
       diagnostics.failed(timeout, { runId: data.runId, stage: data.stage, providerStatus: data.providerStatus ?? data.status, pollAttempt });
       throw timeout;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
+    const pollDelay = data.status === "finalizing" ? 1_000 : data.status === "starting" ? 2_000 : 4_000;
+    await new Promise((resolve) => window.setTimeout(resolve, pollDelay));
     pollAttempt += 1;
     const slowPoll = window.setTimeout(() => diagnostics.progress({
       runId: data.runId,
@@ -566,7 +567,8 @@ export const dataApi = {
         diagnostics.failed(timeout, { runId: data.runId, stage: data.stage, providerStatus: data.providerStatus ?? data.status, pollAttempt });
         throw timeout;
       }
-      await new Promise((resolve) => window.setTimeout(resolve, data.status === "starting" ? 2_000 : 4_000));
+      const pollDelay = data.status === "finalizing" ? 1_000 : data.status === "starting" ? 2_000 : 4_000;
+      await new Promise((resolve) => window.setTimeout(resolve, pollDelay));
       pollAttempt += 1;
       const slowPoll = window.setTimeout(() => diagnostics.progress({
         runId: data.runId,

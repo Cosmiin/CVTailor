@@ -228,11 +228,18 @@ Deno.serve(async (request) => {
 
       const payload = await retrieveStructuredResponse(run.provider_response_id);
       const providerStatus = String(payload.status ?? "unknown");
-      await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
       if (providerStatus === "queued" || providerStatus === "in_progress") {
+        await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
         return json(request, { ...pendingRun(run, runId, providerStatus, "waiting_for_ai"), providerStatus }, 202);
       }
-      if (providerStatus !== "completed") throw new Error(terminalStatusError(payload));
+      if (providerStatus !== "completed") {
+        await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
+        throw new Error(terminalStatusError(payload));
+      }
+      if (run.provider_status !== "finalizing") {
+        await admin.from("tailor_runs").update({ provider_status: "finalizing" }).eq("id", runId).eq("user_id", auth.user.id);
+        return json(request, { ...pendingRun(run, runId, "finalizing", "validating_and_saving_cv"), providerStatus: "completed" }, 202);
+      }
 
       const source = await loadTailoringSource(client, admin, auth.user.id, run.job_id, run.interview_session_id ?? "", true);
       if (run.source_fingerprint && source.sourceFingerprint !== run.source_fingerprint) throw new Error("tailoring_source_changed");
