@@ -482,6 +482,21 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .settings-card h2, .admin-card h2 { margin: 0 0 5px; font-size: 16px; }
 .settings-card p, .admin-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .settings-card code { color: var(--green); background: #e8efec; }
+.extension-card { margin-bottom: 15px; overflow: hidden; border: 1px solid #bfd2cb; border-radius: 12px; background: #fffefa; }
+.extension-card-main { padding: 25px; display: flex; align-items: center; justify-content: space-between; gap: 30px; background: linear-gradient(120deg, #fffefa, #edf6f1); }
+.extension-card-copy { max-width: 500px; }
+.extension-card-copy h2 { margin: 12px 0 7px; color: var(--green); font-size: 23px; letter-spacing: -.025em; }
+.extension-card-copy p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.extension-download { flex: 0 0 auto; display: grid; justify-items: center; gap: 7px; }
+.extension-download small { color: var(--muted); font-size: 9px; }
+.extension-install { padding: 20px 25px; border-top: 1px solid #d7e2de; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.extension-install > div { min-width: 0; display: grid; grid-template-columns: 25px 1fr; align-items: start; gap: 9px; }
+.extension-install > div > span { width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--green); font-size: 10px; font-weight: 750; }
+.extension-install p, .extension-install strong { display: block; }
+.extension-install p { margin: 1px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.extension-install strong { margin-bottom: 3px; color: var(--ink); font-size: 10px; }
+.extension-install code { padding: 1px 3px; color: var(--green); background: #e8efec; font-size: 9px; }
+.extension-note { margin: 0; padding: 11px 25px; border-top: 1px solid #e1e5e2; display: flex; align-items: center; gap: 7px; color: #675a3b; background: #fbf6e9; font-size: 10px; line-height: 1.45; }
 .usage-card { margin-bottom: 15px; padding: 25px; border: 1px solid #cddbd6; border-radius: 12px; background: linear-gradient(120deg, #fffefa, #f0f6f2); }
 .usage-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .usage-card-heading h2 { margin: 7px 0 3px; color: var(--green); font-size: 34px; letter-spacing: -.045em; }
@@ -756,11 +771,18 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
   .proposed-evidence-list article { grid-template-columns: 1fr; }
   .saved-evidence-heading, .saved-evidence-panel article { align-items: flex-start; flex-direction: column; }
   .settings-card, .admin-card { align-items: flex-start; flex-direction: column; }
+  .extension-card-main { align-items: flex-start; flex-direction: column; }
+  .extension-download, .extension-download .button { width: 100%; }
+  .extension-install { grid-template-columns: 1fr 1fr; }
   .metric-grid { grid-template-columns: 1fr; }
   .limit-control { width: 100%; flex-wrap: wrap; }
   .admin-table-row { grid-template-columns: 1.2fr .65fr; }
   .admin-table-row.heading span:nth-child(3), .admin-table-row.heading span:nth-child(4), .admin-table-row > .status-badge { display: none; }
   .account-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+@media (max-width: 520px) {
+  .extension-install { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
