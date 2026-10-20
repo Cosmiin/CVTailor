@@ -59,6 +59,15 @@ export const friendlyFunctionErrorCode = (code: string) => ({
     experience_ai_rate_limited: "You have reached the short-term interview limit. Please try again in an hour.",
     job_interview_busy: "Another evidence check is already running. Please wait a moment and try again.",
     experience_ai_busy: "Another evidence check is already running. Please wait a moment and try again.",
+    voice_transcription_unavailable: "Voice transcription requires the connected CV Maker service.",
+    voice_transcription_invalid_audio: "That recording could not be read. Reset it and record again.",
+    voice_transcription_file_too_large: "That recording is too large. Reset it and record a shorter answer.",
+    voice_transcription_rate_limited: "You have reached the short-term voice limit. Please try again in an hour.",
+    voice_transcription_busy: "Another recording is being transcribed. Please wait for it to finish.",
+    voice_transcription_timeout: "Transcription took too long. Your recording is still available, so you can try again.",
+    voice_transcription_failed: "The recording could not be transcribed. Your typed answer is unchanged.",
+    voice_transcript_empty: "No speech was detected. Reset the recording and try again.",
+    voice_transcript_too_long: "The transcript is too long for one answer. Record a shorter response.",
     job_interview_not_ready: "Complete the evidence review before generating your CV.",
     job_interview_answers_incomplete: "Answer or skip each question before reviewing the evidence.",
     job_title_required: "Add the role title.",
@@ -208,6 +217,15 @@ const demoQuestions = [
 }));
 
 export const dataApi = {
+  async transcribeInterviewAudio(audio: Blob, fileName: string): Promise<{ text: string }> {
+    if (!isSupabaseConfigured) throw new Error(friendlyFunctionErrorCode("voice_transcription_unavailable"));
+    const form = new FormData();
+    form.append("file", audio, fileName);
+    const { data, error } = await supabase!.functions.invoke("transcribe-audio", { body: form });
+    if (error || data?.error) throw new Error(await functionErrorMessage(error, data, "The recording could not be transcribed."));
+    return { text: String(data?.text ?? "") };
+  },
+
   async getBaseCV(): Promise<BaseCV | null> {
     if (!isSupabaseConfigured) return readDemo().baseCV;
     const { data, error } = await supabase!.from("base_cvs").select("document").maybeSingle();

@@ -24,6 +24,26 @@ const baseSession: JobTailoringSession = {
 const noop = async () => undefined;
 
 describe("job evidence interview", () => {
+  it("offers voice input on free-text answers", () => {
+    const session: JobTailoringSession = {
+      ...baseSession, status: "questions", currentIndex: 0,
+      questions: [{ id: "q1", targetExperienceId: demoCV.experience[0].id, requirementIds: ["r2"], prompt: "Which tools did you use?", type: "free_text", options: [], rationale: "Clarifies tool evidence." }],
+    };
+    const html = renderToStaticMarkup(<JobEvidenceInterview session={session} experiences={demoCV.experience} busy={false} error="" onClose={() => undefined} onSaveAnswer={noop} onReconfirm={noop} onSynthesize={noop} onApprove={noop} onGenerate={noop} onDiscard={noop} />);
+    expect(html).toContain("What happened in this role?");
+    expect(html).toContain("Voice recording is not supported in this browser");
+  });
+
+  it("offers voice input on optional choice details", () => {
+    const session: JobTailoringSession = {
+      ...baseSession, status: "questions", currentIndex: 0,
+      questions: [{ id: "q1", targetExperienceId: demoCV.experience[0].id, requirementIds: ["r1"], prompt: "What did you own?", type: "single", options: [{ id: "o1", label: "Planning" }, { id: "o2", label: "Not applicable" }], rationale: "Clarifies ownership." }],
+    };
+    const html = renderToStaticMarkup(<JobEvidenceInterview session={session} experiences={demoCV.experience} busy={false} error="" onClose={() => undefined} onSaveAnswer={noop} onReconfirm={noop} onSynthesize={noop} onApprove={noop} onGenerate={noop} onDiscard={noop} />);
+    expect(html).toContain("Optional detail");
+    expect(html).toContain("Voice recording is not supported in this browser");
+  });
+
   it("shows factual coverage without presenting an ATS score", () => {
     const html = renderToStaticMarkup(<JobEvidenceInterview session={baseSession} experiences={demoCV.experience} busy={false} error="" onClose={() => undefined} onSaveAnswer={noop} onReconfirm={noop} onSynthesize={noop} onApprove={noop} onGenerate={noop} onDiscard={noop} />);
     expect(html).toContain("Evidence coverage");

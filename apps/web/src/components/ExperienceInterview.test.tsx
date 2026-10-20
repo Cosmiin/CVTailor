@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { demoCV, experienceFingerprint, type ExperienceEnrichment } from "@cv-maker/shared";
-import { ExperienceContextPanel } from "./ExperienceInterview";
+import { ExperienceContextPanel, ExperienceInterview } from "./ExperienceInterview";
 import { CVPreview } from "./CVPreview";
 
 const experience = demoCV.experience[0];
@@ -24,6 +24,17 @@ const record: ExperienceEnrichment = {
 };
 
 describe("experience context UI", () => {
+  it("offers voice input only on the interview note", () => {
+    const draft: ExperienceEnrichment = {
+      experienceId: experience.id, createdAt: now, updatedAt: now, active: null, pending: null,
+      draft: { schemaVersion: 1, sourceFingerprint: experienceFingerprint(experience), questions, answers: [], currentIndex: 0, startedAt: now, updatedAt: now },
+    };
+    const html = renderToStaticMarkup(<ExperienceInterview experience={experience} record={draft} onChange={() => undefined} onClose={() => undefined} />);
+    expect(html).toContain("Anything else you want the AI to understand?");
+    expect(html).toContain("Voice recording is not supported in this browser");
+    expect((html.match(/Voice recording is not supported/g) ?? [])).toHaveLength(1);
+  });
+
   it("shows approved context in the editor panel", () => {
     const html = renderToStaticMarkup(<ExperienceContextPanel experience={experience} record={record} onOpen={() => undefined} onConfirm={() => undefined} onDelete={() => undefined} />);
     expect(html).toContain("Confirmed evidence");

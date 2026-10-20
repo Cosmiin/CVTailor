@@ -285,7 +285,7 @@ export const experienceInterviewQuestionSchema = z.object({
 export const experienceInterviewAnswerSchema = z.object({
   questionId: z.string().min(1).max(80),
   selectedOptionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
-  note: z.string().max(1500),
+  note: z.string().max(2500),
 });
 
 const enrichmentTimestampSchema = z.string().datetime({ offset: true });
@@ -391,7 +391,7 @@ export const jobInterviewQuestionSchema = z.object({
 export const jobInterviewAnswerSchema = z.object({
   questionId: z.string().min(1).max(80),
   selectedOptionIds: z.array(z.string().min(1).max(80)).max(8),
-  note: z.string().max(1500),
+  note: z.string().max(2500),
   skipped: z.boolean(),
 });
 

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, CircleAlert, LoaderCircle, ShieldCheck, S
 import type {
   BaseCV, JobInterviewAnswer, JobTailoringSession, ProposedExperienceEvidence,
 } from "@cv-maker/shared";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 type Props = {
   session: JobTailoringSession;
@@ -30,9 +31,13 @@ const statusLabel = {
 export function JobEvidenceInterview({
   session, experiences, busy, generating = false, error, onClose, onSaveAnswer, onReconfirm, onSynthesize, onApprove, onGenerate, onDiscard,
 }: Props) {
+  const initialQuestion = session.questions[session.currentIndex] ?? null;
   const [selectedPrior, setSelectedPrior] = useState<string[]>([]);
-  const [answer, setAnswer] = useState<JobInterviewAnswer | null>(null);
+  const [answer, setAnswer] = useState<JobInterviewAnswer | null>(() => initialQuestion
+    ? session.answers.find((item) => item.questionId === initialQuestion.id) ?? { questionId: initialQuestion.id, selectedOptionIds: [], note: "", skipped: false }
+    : null);
   const [proposed, setProposed] = useState<ProposedExperienceEvidence[]>(session.proposedEvidence);
+  const [voiceActive, setVoiceActive] = useState(false);
   const question = session.questions[session.currentIndex] ?? null;
   const roleNames = useMemo(() => new Map(experiences.map((item) => [item.id, `${item.role || "Role"} · ${item.company || "Company"}`])), [experiences]);
 
@@ -68,7 +73,7 @@ export function JobEvidenceInterview({
     <section className="interview-dialog job-evidence-modal" role="dialog" aria-modal="true" aria-labelledby="job-evidence-title">
       <header className="interview-header">
         <div><span className="section-kicker"><Sparkles size={14} /> Evidence check</span><h2 id="job-evidence-title">Strengthen this application truthfully</h2></div>
-        <button className="icon-button" onClick={onClose} aria-label="Close evidence check"><X /></button>
+        <button className="icon-button" onClick={onClose} disabled={busy || voiceActive} aria-label="Close evidence check"><X /></button>
       </header>
 
       {error && <div className="notice error"><CircleAlert size={16} />{error}</div>}
@@ -87,11 +92,11 @@ export function JobEvidenceInterview({
         <div className="interview-progress"><span>Question {session.currentIndex + 1} of {session.questions.length}</span><div><i style={{ width: `${((session.currentIndex + 1) / session.questions.length) * 100}%` }} /></div></div>
         <span className="evidence-role-label">{roleNames.get(question.targetExperienceId)}</span>
         <h3>{question.prompt}</h3><p>{question.rationale}</p>
-        {question.type === "free_text" ? <label>What happened in this role?<textarea rows={5} value={answer.note} onChange={(event) => setAnswer({ ...answer, note: event.target.value })} placeholder="Add a concise factual answer. Avoid confidential information." /></label> : <>
+        {question.type === "free_text" ? <div className="voice-answer-field"><label>What happened in this role?<textarea rows={5} maxLength={2500} disabled={voiceActive} value={answer.note} onChange={(event) => setAnswer({ ...answer, note: event.target.value })} placeholder="Add a concise factual answer. Avoid confidential information." /></label><VoiceRecorder key={question.id} onTranscript={(text) => setAnswer({ ...answer, note: text })} onActivityChange={setVoiceActive} disabled={busy} /></div> : <>
           <div className="interview-options">{question.options.map((option) => <label key={option.id} className={answer.selectedOptionIds.includes(option.id) ? "selected" : ""}><input type={question.type === "single" ? "radio" : "checkbox"} name={question.id} checked={answer.selectedOptionIds.includes(option.id)} onChange={() => toggleChoice(option.id)} /><span>{option.label}</span></label>)}</div>
-          <label>Optional detail<textarea rows={3} value={answer.note} onChange={(event) => setAnswer({ ...answer, note: event.target.value })} placeholder="Add context, tools, scope, or a qualitative outcome." /></label>
+          <div className="voice-answer-field"><label>Optional detail<textarea rows={3} maxLength={2500} disabled={voiceActive} value={answer.note} onChange={(event) => setAnswer({ ...answer, note: event.target.value })} placeholder="Add context, tools, scope, or a qualitative outcome." /></label><VoiceRecorder key={question.id} onTranscript={(text) => setAnswer({ ...answer, note: text })} onActivityChange={setVoiceActive} disabled={busy} /></div>
         </>}
-        <div className="interview-actions"><button className="button button-ghost" onClick={back} disabled={busy || session.currentIndex === 0}><ArrowLeft size={15} />Back</button><button className="button button-ghost" onClick={() => finishAnswer(true)} disabled={busy}>Skip</button><button className="button button-primary" onClick={() => finishAnswer(false)} disabled={busy || !answerValid}>{busy ? <LoaderCircle className="spin" size={15} /> : <ArrowRight size={15} />}{session.currentIndex === session.questions.length - 1 ? "Review evidence" : "Save and continue"}</button></div>
+        <div className="interview-actions"><button className="button button-ghost" onClick={back} disabled={busy || voiceActive || session.currentIndex === 0}><ArrowLeft size={15} />Back</button><button className="button button-ghost" onClick={() => finishAnswer(true)} disabled={busy || voiceActive}>Skip</button><button className="button button-primary" onClick={() => finishAnswer(false)} disabled={busy || voiceActive || !answerValid}>{busy ? <LoaderCircle className="spin" size={15} /> : <ArrowRight size={15} />}{session.currentIndex === session.questions.length - 1 ? "Review evidence" : "Save and continue"}</button></div>
       </div> : session.status === "review" ? <div className="interview-body evidence-review">
         <div className="interview-progress"><span>Review proposed evidence</span><strong>Approve only facts you stand behind</strong></div>
         <p>The selected role cannot be changed here because it comes from the source question. Edit the wording or reject a statement if needed.</p>

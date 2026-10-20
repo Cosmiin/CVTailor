@@ -584,6 +584,16 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .interview-options input { width: 15px; height: 15px; accent-color: var(--green-2); flex: none; }
 .interview-note { margin-top: 19px; color: #45514e; display: grid; gap: 6px; font-size: 9px; font-weight: 750; }
 .interview-note textarea { font-weight: 500; }
+.voice-recorder { margin-top: 9px; padding: 10px 11px; border: 1px solid #d5dbd6; border-radius: 9px; background: rgba(255,255,255,.62); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.voice-recorder > small { width: 100%; color: var(--muted); font-size: 8px; }
+.voice-recorder.unavailable { color: var(--muted); font-size: 9px; }
+.voice-status { color: #34423f; display: inline-flex; align-items: center; gap: 6px; font-size: 9px; font-weight: 750; }
+.voice-status > i { width: 8px; height: 8px; border-radius: 50%; background: #c84c43; box-shadow: 0 0 0 4px rgba(200,76,67,.12); animation: voice-pulse 1.3s ease-in-out infinite; }
+.voice-recorder.paused .voice-status > i { background: #b47a27; box-shadow: none; animation: none; }
+.voice-status.ready { color: var(--green-2); }
+.voice-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.voice-error { width: 100%; color: #9e3c35; display: flex; align-items: center; gap: 5px; font-size: 9px; line-height: 1.45; }
+@keyframes voice-pulse { 50% { opacity: .45; } }
 .interview-wizard > footer, .interview-review > footer { position: sticky; bottom: 0; padding: 15px 25px; border-top: 1px solid #d8dcd7; background: rgba(250,249,245,.95); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: space-between; }
 .interview-wizard > footer svg, .interview-review > footer svg { width: 15px; }
 .interview-review { padding-top: 1px; }
@@ -609,6 +619,8 @@ input:focus, textarea:focus, select:focus { outline: 0; border-color: #648d86; b
 .job-evidence-modal .interview-progress > div { grid-column: 1 / -1; height: 5px; margin: 0; overflow: hidden; border-radius: 8px; background: #dce1dc; display: block; }
 .job-evidence-modal .interview-progress > div i { height: 100%; border-radius: inherit; background: var(--green-2); display: block; }
 .job-evidence-modal .interview-body > label { margin-top: 18px; color: #45514e; display: grid; gap: 6px; font-size: 9px; font-weight: 750; }
+.voice-answer-field { margin-top: 18px; }
+.voice-answer-field > label { color: #45514e; display: grid; gap: 6px; font-size: 9px; font-weight: 750; }
 .evidence-role-label { padding: 5px 9px; border-radius: 30px; color: var(--green-2); background: #e4efeb; font-size: 9px; font-weight: 750; }
 .interview-actions { position: sticky; bottom: -24px; margin: 26px -34px -24px; padding: 14px 34px; border-top: 1px solid #d8dcd7; background: rgba(250,249,245,.97); backdrop-filter: blur(8px); display: flex; justify-content: flex-end; gap: 8px; }
 .interview-actions .button:first-child { margin-right: auto; }

@@ -74,7 +74,7 @@ export const experienceInterviewQuestionSchema = z.object({
 export const experienceInterviewAnswerSchema = z.object({
   questionId: z.string().min(1).max(80),
   selectedOptionIds: z.array(z.string().min(1).max(80)).min(1).max(8),
-  note: z.string().max(1500).default(""),
+  note: z.string().max(2500).default(""),
 });
 
 export const experienceInterviewDraftSchema = z.object({
@@ -155,7 +155,7 @@ export const jobInterviewQuestionSchema = z.object({
 export const jobInterviewAnswerSchema = z.object({
   questionId: z.string().min(1).max(80),
   selectedOptionIds: z.array(z.string().min(1).max(80)).max(8).default([]),
-  note: z.string().max(1500).default(""),
+  note: z.string().max(2500).default(""),
   skipped: z.boolean().default(false),
 });
 

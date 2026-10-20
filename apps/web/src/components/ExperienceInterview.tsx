@@ -5,6 +5,7 @@ import {
   type ExperienceEnrichment, type ExperienceInterviewAnswer,
 } from "@cv-maker/shared";
 import { dataApi } from "../lib/data";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 type Experience = BaseCV["experience"][number];
 type Props = {
@@ -52,6 +53,7 @@ export function ExperienceInterview({ experience, record: initialRecord, onChang
   const [index, setIndex] = useState(initialRecord?.draft?.currentIndex ?? 0);
   const [review, setReview] = useState<ExperienceContext | null>(initialRecord?.pending ?? null);
   const [editingActive, setEditingActive] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
   const draft = record?.draft ?? null;
   const question = draft?.questions[index];
   const savedAnswer = draft?.answers.find((item) => item.questionId === question?.id);
@@ -59,9 +61,9 @@ export function ExperienceInterview({ experience, record: initialRecord, onChang
   const [note, setNote] = useState(savedAnswer?.note ?? "");
 
   useEffect(() => {
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) onClose(); };
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy && !voiceActive) onClose(); };
     window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close);
-  }, [busy, onClose]);
+  }, [busy, onClose, voiceActive]);
 
   useEffect(() => {
     const answer = draft?.answers.find((item) => item.questionId === question?.id);
@@ -100,9 +102,9 @@ export function ExperienceInterview({ experience, record: initialRecord, onChang
   const progress = draft ? Math.round(((index + 1) / draft.questions.length) * 100) : 0;
   const roleChanged = useMemo(() => Boolean(record?.active && record.active.sourceFingerprint !== experienceFingerprint(experience)), [record?.active, experience]);
 
-  return <div className="interview-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+  return <div className="interview-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && !voiceActive && onClose()}>
     <section className="interview-dialog" role="dialog" aria-modal="true" aria-labelledby="experience-interview-title">
-      <header><div><span className="section-kicker"><Sparkles size={13} /> AI experience interview</span><h2 id="experience-interview-title">{experience.role || "Your role"}</h2><p>{experience.company || "Company not set"}</p></div><button className="icon-button" onClick={onClose} disabled={busy} aria-label="Close interview"><X /></button></header>
+      <header><div><span className="section-kicker"><Sparkles size={13} /> AI experience interview</span><h2 id="experience-interview-title">{experience.role || "Your role"}</h2><p>{experience.company || "Company not set"}</p></div><button className="icon-button" onClick={onClose} disabled={busy || voiceActive} aria-label="Close interview"><X /></button></header>
       {error && <div className="notice error"><CircleAlert size={16} />{error}</div>}
 
       {review ? <div className="interview-review"><div className="interview-copy"><span className="section-kicker">{editingActive ? "Edit confirmed context" : "Review before saving"}</span><h3>Your deeper role context</h3><p>Edit anything that does not sound accurate. This stays off the base CV but becomes confirmed evidence for future tailoring.</p></div><ContextEditor value={review} onChange={setReview} /><footer><button className="button button-ghost" onClick={() => { if (editingActive) { setReview(null); setEditingActive(false); } else discard(); }} disabled={busy}>{editingActive ? <X size={15} /> : <Trash2 size={15} />}{editingActive ? "Cancel" : "Discard draft"}</button><button className="button button-primary" onClick={approve} disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Check />}{editingActive ? "Save changes" : "Approve context"}</button></footer></div>
@@ -110,9 +112,10 @@ export function ExperienceInterview({ experience, record: initialRecord, onChang
         <div className="interview-progress"><div><span>Question {index + 1} of {draft.questions.length}</span><span>{progress}%</span></div><i><b style={{ width: `${progress}%` }} /></i></div>
         <div className="interview-question"><span className="section-kicker">Tell us what the CV leaves out</span><h3>{question.prompt}</h3>{question.rationale && <p>{question.rationale}</p>}
           <div className="interview-options">{question.options.map((option) => { const checked = selected.includes(option.id); return <label className={checked ? "selected" : ""} key={option.id}><input type={question.type === "single" ? "radio" : "checkbox"} name={question.id} checked={checked} onChange={() => setSelected((current) => question.type === "single" ? [option.id] : checked ? current.filter((id) => id !== option.id) : [...current, option.id])} /><span>{option.label}</span></label>; })}</div>
-          <label className="interview-note">Anything else you want the AI to understand?<textarea rows={4} placeholder="Optional context, examples, or nuance…" value={note} onChange={(event) => setNote(event.target.value)} maxLength={1500} /></label>
+          <label className="interview-note">Anything else you want the AI to understand?<textarea rows={4} placeholder="Optional context, examples, or nuance…" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2500} disabled={voiceActive} /></label>
+          <VoiceRecorder key={question.id} onTranscript={setNote} onActivityChange={setVoiceActive} disabled={busy} />
         </div>
-        <footer><button className="button button-ghost" onClick={() => setIndex((current) => Math.max(0, current - 1))} disabled={busy || index === 0}><ArrowLeft />Back</button><button className="button button-primary" onClick={saveAndAdvance} disabled={busy || selected.length === 0}>{busy ? <LoaderCircle className="spin" /> : index === draft.questions.length - 1 ? <Sparkles /> : <ArrowRight />}{busy ? "Saving…" : index === draft.questions.length - 1 ? "Build role context" : "Save and continue"}</button></footer>
+        <footer><button className="button button-ghost" onClick={() => setIndex((current) => Math.max(0, current - 1))} disabled={busy || voiceActive || index === 0}><ArrowLeft />Back</button><button className="button button-primary" onClick={saveAndAdvance} disabled={busy || voiceActive || selected.length === 0}>{busy ? <LoaderCircle className="spin" /> : index === draft.questions.length - 1 ? <Sparkles /> : <ArrowRight />}{busy ? "Saving…" : index === draft.questions.length - 1 ? "Build role context" : "Save and continue"}</button></footer>
       </div>
       : <div className="interview-start"><Sparkles /><span className="section-kicker">{record?.active ? "Refresh context" : "Reveal the work behind the title"}</span><h3>{record?.active ? "Update your role evidence." : "Give tailoring better evidence."}</h3><p>{record?.active ? "Edit the approved context directly or run a fresh interview. Your current context stays active until a replacement interview is approved." : "AI will ask 5–10 focused questions based on this role and your safe CV context. Your answers are saved as you go."}</p>{roleChanged && <div className="stale-callout"><CircleAlert />This role has changed since its context was approved.</div>}<div className="interview-start-actions"><button className="button button-primary button-large" onClick={start} disabled={busy}>{busy ? <LoaderCircle className="spin" /> : <Sparkles />}{busy ? "Preparing questions…" : record?.active ? "Start refresh" : "Start interview"}</button>{record?.active && <button className="button button-ghost" onClick={() => { setEditingActive(true); setReview(structuredClone(record.active!.context)); }}>Edit current context</button>}</div></div>}
     </section>

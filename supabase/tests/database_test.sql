@@ -1,5 +1,5 @@
 begin;
-select plan(18);
+select plan(21);
 
 select has_table('public', 'base_cvs', 'base CV table exists');
 select has_table('public', 'jobs', 'jobs table exists');
@@ -18,6 +18,9 @@ select has_column('public', 'job_interview_ai_runs', 'source_fingerprint', 'evid
 select has_column('public', 'job_interview_ai_runs', 'updated_at', 'evidence runs can recover abandoned finalization claims');
 select has_function('public', 'reserve_job_interview_ai_run_v2', array['uuid', 'text', 'text'], 'concurrent evidence reservation function exists');
 select has_function('public', 'claim_job_interview_ai_run', array['uuid'], 'evidence finalization uses an atomic recoverable claim');
+select has_table('public', 'voice_transcription_runs', 'voice transcription request ledger exists');
+select has_column('public', 'voice_transcription_runs', 'audio_bytes', 'voice ledger stores only request metadata');
+select has_function('public', 'reserve_voice_transcription', array['integer'], 'voice transcription reservations are rate limited');
 select results_eq(
   $$ select global_monthly_limit from public.app_settings where singleton = true $$,
   array[5],

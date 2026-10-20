@@ -23,6 +23,8 @@ const openAIKey = () => {
 const openAIModel = (modelEnv?: string) =>
   (modelEnv ? Deno.env.get(modelEnv) : null) ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-6.1-sol";
 
+export const openAITranscriptionModel = () => Deno.env.get("OPENAI_TRANSCRIPTION_MODEL") ?? "gpt-transcribe";
+
 const retryDelay = (response: Response, attempt: number) => {
   const retryAfter = response.headers.get("retry-after");
   const seconds = retryAfter ? Number(retryAfter) : Number.NaN;
@@ -117,4 +119,41 @@ export const runStructuredResponse = async (
   const started = await startStructuredResponse(schemaName, schema, instructions, input, options);
   if (options.onUsage) await options.onUsage(responseUsage(started.payload, started.model));
   return parseStructuredResponse(started.payload, started.model);
+};
+
+export const transcribeAudioFile = async (file: File) => {
+  const model = openAITranscriptionModel();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      body.append("model", model);
+      body.append("response_format", "json");
+      body.append("languages[]", "en");
+      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openAIKey()}` },
+        body,
+        signal: AbortSignal.timeout(90_000),
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        return { text: String(payload?.text ?? ""), model };
+      }
+      const payload = await response.json().catch(() => ({}));
+      const providerCode = String(payload?.error?.code ?? "");
+      const retryable = response.status === 429 || response.status === 503;
+      if (retryable && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay(response, attempt)));
+        continue;
+      }
+      if (response.status === 429) throw new Error("voice_transcription_rate_limited");
+      throw new Error(`openai_${providerCode || response.status}`);
+    } catch (error) {
+      if (error instanceof Error && (error.message.startsWith("openai_") || error.message.startsWith("voice_transcription_"))) throw error;
+      if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("voice_transcription_timeout");
+      throw new Error("voice_transcription_failed");
+    }
+  }
+  throw new Error("voice_transcription_failed");
 };
