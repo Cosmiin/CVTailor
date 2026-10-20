@@ -1,5 +1,6 @@
 import { adminClient, handleOptions, json, requireUser } from "../_shared/http.ts";
-import { parseStructuredResponse, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
+import { parseStructuredResponse, responseUsage, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
+import { recordAiUsage } from "../_shared/usage.ts";
 import { budgetEvidenceItems, selectRelevantExperienceEvidence } from "../_shared/evidence-ranking.ts";
 import {
   jobEvidenceSynthesisJsonSchema, jobEvidenceSynthesisSchema, jobInterviewAnalysisJsonSchema,
@@ -269,6 +270,13 @@ Deno.serve(async (request) => {
           .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");
         return json(request, { ...pendingRun(run, runId, providerStatus, "waiting_for_ai"), providerStatus }, 202);
       }
+      await recordAiUsage(admin, {
+        userId: user.id,
+        purpose: run.phase === "analysis" ? "job_analysis" : "job_synthesis",
+        result: responseUsage(provider, run.model),
+        operationKey: `job-interview:${runId}`,
+        jobId: run.job_id,
+      });
       if (providerStatus !== "completed") {
         await admin.from("job_interview_ai_runs").update({ provider_status: providerStatus })
           .eq("id", runId).eq("user_id", user.id).eq("status", "reserved");

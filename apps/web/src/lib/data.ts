@@ -1,10 +1,10 @@
 import type {
-  ApplicationStatus, BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceEvidence,
+  AiUsageRecord, AiUsageSummary, ApplicationStatus, BaseCV, CVTemplateId, ExperienceContext, ExperienceEnrichment, ExperienceEvidence,
   ExperienceInterviewAnswer, JobInterviewAnswer, JobSnapshot, JobTailoringSession, ProposedExperienceEvidence,
   QuotaState, TailoredCV,
 } from "@cv-maker/shared";
 import {
-  demoCV, experienceEnrichmentSchema, experienceEvidenceSchema, experienceFingerprint, exportableCV,
+  aiUsageSummarySchema, demoCV, experienceEnrichmentSchema, experienceEvidenceSchema, experienceFingerprint, exportableCV,
   jobTailoringSessionSchema, tailoredCVSchema,
 } from "@cv-maker/shared";
 import { isSupabaseConfigured, supabase } from "./supabase";
@@ -28,6 +28,7 @@ type DemoStore = {
   enrichments?: Record<string, ExperienceEnrichment>;
   evidence?: ExperienceEvidence[];
   jobSessions?: Record<string, JobTailoringSession>;
+  aiUsage?: AiUsageRecord[];
 };
 
 const readDemo = (): DemoStore => {
@@ -540,9 +541,12 @@ export const dataApi = {
     if (!isSupabaseConfigured) {
       const store = readDemo();
       const skill = { id: "inferred-ai", text: "Experimentation strategy", visible: true, provenance: { status: "inferred_unconfirmed" as const, sourceRefs: ["job.description"], rationale: "The role emphasizes experimentation; confirm that this reflects your experience." } };
-      const cv = tailoredCVSchema.parse({ ...store.baseCV, jobId: job.id, templateId, generatedAt: new Date().toISOString(), summary: { ...store.baseCV.summary, text: `Product operations leader aligning planning, experimentation and customer insight to help ${job.company || "growing teams"} deliver better outcomes.` }, skills: [...store.baseCV.skills, skill] });
+      const createdAt = new Date().toISOString();
+      const aiUsage: AiUsageRecord = { id: crypto.randomUUID(), purpose: "cv_tailoring", model: "gpt-6.1-sol", inputTokens: 4200, cachedInputTokens: 0, outputTokens: 950, totalTokens: 5150, costUsd: 0.0179, createdAt };
+      const cv = tailoredCVSchema.parse({ ...store.baseCV, jobId: job.id, templateId, generatedAt: createdAt, aiUsage, summary: { ...store.baseCV.summary, text: `Product operations leader aligning planning, experimentation and customer insight to help ${job.company || "growing teams"} deliver better outcomes.` }, skills: [...store.baseCV.skills, skill] });
       const index = store.jobs.findIndex((item) => item.id === job.id);
       store.jobs[index] = { ...store.jobs[index], latestTailoredCV: cv, templateId, updatedAt: new Date().toISOString() };
+      store.aiUsage = [...(store.aiUsage ?? []), aiUsage];
       writeDemo(store); await new Promise((resolve) => setTimeout(resolve, 900)); return cv;
     }
     const diagnostics = createAiDiagnostics("cv-tailoring", { jobId: job.id });
@@ -654,5 +658,30 @@ export const dataApi = {
       return { limit: store.limit, used, reserved: 0, remaining: Math.max(store.limit - used, 0), resetsAt: reset.toISOString(), disabled: false };
     }
     const { data, error } = await supabase!.rpc("current_quota_state"); if (error) throw error; return data;
+  },
+
+  async getAiUsageSummary(): Promise<AiUsageSummary> {
+    if (!isSupabaseConfigured) {
+      const events = readDemo().aiUsage ?? [];
+      const byModel = new Map<string, AiUsageSummary["byModel"][number]>();
+      for (const event of events) {
+        const current = byModel.get(event.model) ?? { model: event.model, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, eventCount: 0, unpricedEvents: 0 };
+        current.inputTokens += event.inputTokens; current.outputTokens += event.outputTokens; current.totalTokens += event.totalTokens;
+        current.costUsd += event.costUsd ?? 0; current.eventCount += 1; current.unpricedEvents += event.costUsd === null ? 1 : 0;
+        byModel.set(event.model, current);
+      }
+      return aiUsageSummarySchema.parse({
+        inputTokens: events.reduce((sum, event) => sum + event.inputTokens, 0),
+        outputTokens: events.reduce((sum, event) => sum + event.outputTokens, 0),
+        totalTokens: events.reduce((sum, event) => sum + event.totalTokens, 0),
+        costUsd: events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0),
+        eventCount: events.length,
+        unpricedEvents: events.filter((event) => event.costUsd === null).length,
+        byModel: [...byModel.values()],
+      });
+    }
+    const { data, error } = await supabase!.rpc("current_ai_usage_summary");
+    if (error) throw error;
+    return aiUsageSummarySchema.parse(data);
   },
 };

@@ -1,6 +1,7 @@
 import { adminClient, handleOptions, json, requireUser } from "../_shared/http.ts";
-import { parseStructuredResponse, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
+import { parseStructuredResponse, responseUsage, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
 import { jobStructuredJsonSchema, jobStructuredSchema } from "../_shared/schema.ts";
+import { recordAiUsage } from "../_shared/usage.ts";
 
 const PARSER_VERSION = "job-v4-2026-10-19";
 
@@ -109,6 +110,10 @@ const parseCompletedResponse = (payload: any, modelFallback?: string) => {
   return {
     value: jobStructuredSchema.parse({ ...parsed, datePosted, validThrough, warnings: [...new Set(warnings)] }),
     model: result.model,
+    inputTokens: result.inputTokens,
+    cachedInputTokens: result.cachedInputTokens,
+    outputTokens: result.outputTokens,
+    responseId: result.responseId,
   };
 };
 
@@ -242,6 +247,11 @@ Deno.serve(async (request) => {
           .eq("id", job.id).eq("user_id", user.id).select().single();
         return json(request, { job: pendingJob ?? job, pending: true }, 202);
       }
+      await recordAiUsage(admin, {
+        userId: user.id, purpose: "job_parsing", result: responseUsage(payload, job.parser_model),
+        operationKey: `job-parse:${job.id}:${job.parse_response_id}`,
+        jobId: job.id,
+      });
       if (providerStatus !== "completed") {
         const reason = normalize(payload?.error?.code ?? payload?.incomplete_details?.reason ?? providerStatus, 100);
         const failed = await markParseFailed(admin, job.id, user.id, new Error(`openai_${reason}`));

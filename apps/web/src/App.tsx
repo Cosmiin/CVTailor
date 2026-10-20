@@ -9,7 +9,7 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import {
   baseCVSchema, createId, demoCV, emptyBaseCV, hasUnconfirmedClaims,
-  type BaseCV, type CVTemplateId, type ExperienceEnrichment, type ExperienceEvidence, type JobInterviewAnswer,
+  type AiUsageSummary, type BaseCV, type CVTemplateId, type ExperienceEnrichment, type ExperienceEvidence, type JobInterviewAnswer,
   type JobTailoringSession, type ProposedExperienceEvidence, type TailoredCV,
 } from "@cv-maker/shared";
 import { CVPreview } from "./components/CVPreview";
@@ -22,6 +22,7 @@ import { JobParseRecovery } from "./components/JobParseRecovery";
 import { dataApi, type JobRecord } from "./lib/data";
 import { extractCVText } from "./lib/extract";
 import { appUrl, isSupabaseConfigured, supabase } from "./lib/supabase";
+import { formatTokenCount, formatUsdCost } from "./lib/usage";
 
 const formatDate = (value: string) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
 const errorMessage = (error: unknown) => error instanceof Error ? error.message.replaceAll("_", " ") : "Something went wrong.";
@@ -224,9 +225,10 @@ function CVForm({ cv, onChange, baseMode = false }: { cv: BaseCV; onChange: (cv:
 }
 
 function SettingsPage({ onLogout }: { onLogout: () => void }) {
-  const [busy, setBusy] = useState(false); const navigate = useNavigate();
+  const [busy, setBusy] = useState(false); const [usage, setUsage] = useState<AiUsageSummary | null>(null); const [usageError, setUsageError] = useState(""); const navigate = useNavigate();
+  useEffect(() => { dataApi.getAiUsageSummary().then(setUsage).catch((caught) => setUsageError(errorMessage(caught))); }, []);
   const remove = async () => { if (!supabase || !confirm("Permanently delete your account, CV, jobs and files? This cannot be undone.")) return; setBusy(true); const { data, error } = await supabase.functions.invoke("delete-account"); if (error || data?.error) { alert(data?.error || error.message); setBusy(false); return; } navigate("/"); };
-  return <main className="workspace narrow"><header className="workspace-header"><div><span className="section-kicker">Account</span><h1>Settings</h1><p>Control your session and stored data.</p></div></header><section className="settings-card"><div><h2>Browser extension</h2><p>Build the developer extension, load <code>apps/extension/dist</code> in Chrome, then sign in with this account.</p></div><span className="status-badge ready"><Check size={12} />Developer build</span></section><section className="settings-card"><div><h2>Sign out</h2><p>Your saved CV and jobs remain in your private workspace.</p></div><button className="button button-ghost" onClick={onLogout}><LogOut size={16} />Sign out</button></section><section className="settings-card danger-zone"><div><h2>Delete account</h2><p>Permanently remove your account, CV source file, jobs and generated drafts.</p></div><button className="button button-danger" onClick={remove} disabled={busy || !supabase}><Trash2 size={16} />{busy ? "Deleting…" : "Delete everything"}</button></section></main>;
+  return <main className="workspace narrow"><header className="workspace-header"><div><span className="section-kicker">Account</span><h1>Settings</h1><p>Control your session, AI usage, and stored data.</p></div></header><section className="usage-card"><div className="usage-card-heading"><div><span className="section-kicker">AI model usage</span><h2>{usage ? formatUsdCost(usage.costUsd) : "Loading…"}</h2><p>Estimated standard API token cost since usage tracking was enabled.</p></div>{usage && <span className="usage-event-count">{usage.eventCount} model {usage.eventCount === 1 ? "call" : "calls"}</span>}</div>{usageError && <div className="notice error"><CircleAlert size={16} />{usageError}</div>}{usage && <><div className="usage-totals"><div><small>Input tokens</small><strong>{formatTokenCount(usage.inputTokens)}</strong></div><div><small>Output tokens</small><strong>{formatTokenCount(usage.outputTokens)}</strong></div><div><small>Total tokens</small><strong>{formatTokenCount(usage.totalTokens)}</strong></div></div>{usage.byModel.length > 0 ? <div className="usage-models"><div className="usage-model-row heading"><span>Model</span><span>Input</span><span>Output</span><span>Cost</span></div>{usage.byModel.map((model) => <div className="usage-model-row" key={model.model}><strong>{model.model}</strong><span>{formatTokenCount(model.inputTokens)}</span><span>{formatTokenCount(model.outputTokens)}</span><span>{formatUsdCost(model.unpricedEvents ? null : model.costUsd)}</span></div>)}</div> : <div className="usage-empty">No tracked AI usage yet. New model calls will appear here.</div>}{usage.unpricedEvents > 0 && <p className="usage-note">{usage.unpricedEvents} {usage.unpricedEvents === 1 ? "call uses" : "calls use"} a model without a saved rate and is excluded from the USD total.</p>}</>}</section><section className="settings-card"><div><h2>Browser extension</h2><p>Build the developer extension, load <code>apps/extension/dist</code> in Chrome, then sign in with this account.</p></div><span className="status-badge ready"><Check size={12} />Developer build</span></section><section className="settings-card"><div><h2>Sign out</h2><p>Your saved CV and jobs remain in your private workspace.</p></div><button className="button button-ghost" onClick={onLogout}><LogOut size={16} />Sign out</button></section><section className="settings-card danger-zone"><div><h2>Delete account</h2><p>Permanently remove your account, CV source file, jobs and generated drafts.</p></div><button className="button button-danger" onClick={remove} disabled={busy || !supabase}><Trash2 size={16} />{busy ? "Deleting…" : "Delete everything"}</button></section></main>;
 }
 
 function AdminPage() {

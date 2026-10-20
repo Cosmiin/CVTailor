@@ -1,6 +1,7 @@
 import { adminClient, handleOptions, json, requireUser } from "../_shared/http.ts";
 import { tailoredJsonSchema, tailoredSchema } from "../_shared/schema.ts";
-import { parseStructuredResponse, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
+import { parseStructuredResponse, responseUsage, retrieveStructuredResponse, startStructuredResponse } from "../_shared/openai.ts";
+import { recordAiUsage } from "../_shared/usage.ts";
 
 const normalize = (value: string, limit = 100_000) => value
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ").replace(/\r\n?/g, "\n")
@@ -232,6 +233,14 @@ Deno.serve(async (request) => {
         await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
         return json(request, { ...pendingRun(run, runId, providerStatus, "waiting_for_ai"), providerStatus }, 202);
       }
+      const aiUsage = await recordAiUsage(admin, {
+        userId: auth.user.id,
+        purpose: "cv_tailoring",
+        result: responseUsage(payload, run.model),
+        operationKey: `tailor:${runId}`,
+        jobId: run.job_id,
+        tailorRunId: runId,
+      });
       if (providerStatus !== "completed") {
         await admin.from("tailor_runs").update({ provider_status: providerStatus }).eq("id", runId).eq("user_id", auth.user.id);
         throw new Error(terminalStatusError(payload));
@@ -255,6 +264,7 @@ Deno.serve(async (request) => {
         jobId: run.job_id,
         generatedAt: new Date().toISOString(),
         templateId: run.template_id === "compact" ? "compact" : "clarity",
+        aiUsage,
       });
       const { error: saveError } = await client.from("jobs").update({ latest_tailored_cv: parsed, template_id: parsed.templateId }).eq("id", run.job_id);
       if (saveError) throw new Error("tailored_cv_save_failed");

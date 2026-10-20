@@ -3,6 +3,15 @@ type StructuredResponseOptions = {
   timeoutMs?: number;
   background?: boolean;
   metadata?: Record<string, string>;
+  onUsage?: (usage: ResponseUsage) => Promise<void>;
+};
+
+export type ResponseUsage = {
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  responseId: string;
 };
 
 const openAIKey = () => {
@@ -44,6 +53,14 @@ const requestOpenAI = async (url: string, init: RequestInit, timeoutMs: number) 
   throw new Error("openai_request_failed");
 };
 
+export const responseUsage = (payload: any, modelFallback?: string): ResponseUsage => ({
+  model: payload.model ?? modelFallback ?? "unknown",
+  inputTokens: payload.usage?.input_tokens ?? 0,
+  cachedInputTokens: payload.usage?.input_tokens_details?.cached_tokens ?? 0,
+  outputTokens: payload.usage?.output_tokens ?? 0,
+  responseId: String(payload.id ?? ""),
+});
+
 export const parseStructuredResponse = (payload: any, modelFallback?: string) => {
   if (payload.status && payload.status !== "completed") throw new Error(`openai_${payload.status}`);
   const refusal = payload.output?.flatMap((item: any) => item.content ?? [])
@@ -54,9 +71,7 @@ export const parseStructuredResponse = (payload: any, modelFallback?: string) =>
   if (!outputText) throw new Error("openai_empty_output");
   return {
     value: JSON.parse(outputText),
-    model: payload.model ?? modelFallback ?? "unknown",
-    inputTokens: payload.usage?.input_tokens ?? 0,
-    outputTokens: payload.usage?.output_tokens ?? 0,
+    ...responseUsage(payload, modelFallback),
   };
 };
 
@@ -100,5 +115,6 @@ export const runStructuredResponse = async (
   options: StructuredResponseOptions = {},
 ) => {
   const started = await startStructuredResponse(schemaName, schema, instructions, input, options);
+  if (options.onUsage) await options.onUsage(responseUsage(started.payload, started.model));
   return parseStructuredResponse(started.payload, started.model);
 };

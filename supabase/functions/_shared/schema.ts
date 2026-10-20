@@ -57,10 +57,23 @@ const profilePhoto = z.object({
 
 export const storedCVSchema = cvSchema.extend({ photo: profilePhoto.nullable().optional() });
 
+const aiUsageRecord = z.object({
+  id: z.string().uuid(),
+  purpose: z.literal("cv_tailoring"),
+  model: z.string().min(1).max(100),
+  inputTokens: z.number().int().min(0),
+  cachedInputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+  totalTokens: z.number().int().min(0),
+  costUsd: z.number().min(0).nullable(),
+  createdAt: z.string().datetime(),
+});
+
 export const tailoredSchema = storedCVSchema.extend({
   jobId: z.string().uuid(),
   templateId: z.enum(["clarity", "compact"]),
   generatedAt: z.string().datetime(),
+  aiUsage: aiUsageRecord.nullable().optional(),
 });
 
 const nullableString = z.string().nullable();

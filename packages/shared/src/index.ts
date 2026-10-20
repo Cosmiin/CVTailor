@@ -337,10 +337,44 @@ export const applicationStatusSchema = z.enum([
   "withdrawn",
 ]);
 
+export const aiUsageRecordSchema = z.object({
+  id: z.string().uuid(),
+  purpose: z.enum([
+    "cv_parsing", "job_parsing", "experience_questions", "experience_synthesis",
+    "job_analysis", "job_synthesis", "cv_tailoring",
+  ]),
+  model: z.string().min(1).max(100),
+  inputTokens: z.number().int().min(0),
+  cachedInputTokens: z.number().int().min(0).default(0),
+  outputTokens: z.number().int().min(0),
+  totalTokens: z.number().int().min(0),
+  costUsd: z.number().min(0).nullable(),
+  createdAt: z.string().datetime(),
+});
+
+export const aiUsageSummarySchema = z.object({
+  inputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+  totalTokens: z.number().int().min(0),
+  costUsd: z.number().min(0),
+  eventCount: z.number().int().min(0),
+  unpricedEvents: z.number().int().min(0),
+  byModel: z.array(z.object({
+    model: z.string().min(1).max(100),
+    inputTokens: z.number().int().min(0),
+    outputTokens: z.number().int().min(0),
+    totalTokens: z.number().int().min(0),
+    costUsd: z.number().min(0),
+    eventCount: z.number().int().min(0),
+    unpricedEvents: z.number().int().min(0),
+  })),
+});
+
 export const tailoredCVSchema = baseCVSchema.extend({
   jobId: z.string().uuid().optional(),
   templateId: cvTemplateIdSchema.default("clarity"),
   generatedAt: z.string().datetime(),
+  aiUsage: aiUsageRecordSchema.nullable().optional(),
 });
 
 export const quotaStateSchema = z.object({
@@ -359,6 +393,8 @@ export type BaseCV = z.infer<typeof baseCVSchema>;
 export type JobStructuredData = z.infer<typeof jobStructuredDataSchema>;
 export type JobSnapshot = z.infer<typeof jobSnapshotSchema>;
 export type TailoredCV = z.infer<typeof tailoredCVSchema>;
+export type AiUsageRecord = z.infer<typeof aiUsageRecordSchema>;
+export type AiUsageSummary = z.infer<typeof aiUsageSummarySchema>;
 export type QuotaState = z.infer<typeof quotaStateSchema>;
 export type CVTemplateId = z.infer<typeof cvTemplateIdSchema>;
 export type ApplicationStatus = z.infer<typeof applicationStatusSchema>;

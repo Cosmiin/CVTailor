@@ -1,12 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { budgetEvidenceItems, selectRelevantExperienceEvidence } from "../../../supabase/functions/_shared/evidence-ranking";
 import {
-  applicationStatusSchema, calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
+  aiUsageRecordSchema, applicationStatusSchema, calculateExperienceMonths, calculateRoleExperienceMonths, demoCV, experienceContextSchema, experienceEnrichmentSchema, experienceFingerprint, experienceInterviewDraftSchema,
   experienceEvidenceSchema, exportableCV, formatExperienceDate, formatExperienceDuration, hasUnconfirmedClaims,
   jobInterviewAnswerSchema, jobTailoringSessionSchema, jobStructuredDataSchema, normalizeText,
 } from "./index";
 
 describe("shared CV rules", () => {
+  it("validates forward-only AI usage metadata", () => {
+    const usage = aiUsageRecordSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      purpose: "cv_tailoring",
+      model: "gpt-6.1-sol",
+      inputTokens: 4200,
+      outputTokens: 950,
+      totalTokens: 5150,
+      costUsd: 0.0179,
+      createdAt: "2026-10-20T10:00:00.000Z",
+    });
+    expect(usage.cachedInputTokens).toBe(0);
+    expect(usage.totalTokens).toBe(5150);
+  });
+
   it("validates skippable job interviews and caps them at eight questions", () => {
     const now = new Date().toISOString();
     const question = { id: "q1", targetExperienceId: "role-1", requirementIds: ["r1"], prompt: "Which tool did you use?", type: "free_text" as const, options: [], rationale: "Clarifies a required tool." };

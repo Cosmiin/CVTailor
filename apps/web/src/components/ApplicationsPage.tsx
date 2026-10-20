@@ -9,6 +9,7 @@ import type { ApplicationStatus } from "@cv-maker/shared";
 import { ApplicationTracker } from "./ApplicationTracker";
 import { dataApi, type JobRecord } from "../lib/data";
 import { isSupabaseConfigured } from "../lib/supabase";
+import { formatTokenCount, formatUsdCost } from "../lib/usage";
 
 export const encouragementMessages = [
   "Every thoughtful application is one step closer to the right yes.",
@@ -123,7 +124,7 @@ export function ApplicationsPage({ onUsage }: { onUsage: () => void }) {
         <thead><tr><th>Company and role</th><th>Tailored CV</th><th>Status</th><th>Applied</th><th>Last change</th><th><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>{visibleJobs.map((job) => <tr key={job.id}>
           <td data-label="Company and role"><div className="application-role"><span className="company-avatar">{(job.company || job.title).slice(0, 1).toUpperCase()}</span><div><strong>{job.company || "Company not set"}</strong><button onClick={() => navigate(`/app/jobs/${job.id}`)}>{job.title}</button>{job.location && <small>{job.location}</small>}</div>{job.url && <a href={job.url} target="_blank" rel="noreferrer" aria-label={`Open ${job.title} job listing`}><ExternalLink size={13} /></a>}</div></td>
-          <td data-label="Tailored CV"><span className={`status-badge ${job.latestTailoredCV ? "ready" : "draft"}`}>{job.latestTailoredCV ? <><Check size={12} /> Ready</> : job.parseStatus === "pending" ? <><LoaderCircle className="spin" size={12} /> Processing</> : job.parseStatus === "failed" ? "Parsing failed" : "Not tailored"}</span></td>
+          <td data-label="Tailored CV"><div className="tailored-cv-cell"><span className={`status-badge ${job.latestTailoredCV ? "ready" : "draft"}`}>{job.latestTailoredCV ? <><Check size={12} /> Ready</> : job.parseStatus === "pending" ? <><LoaderCircle className="spin" size={12} /> Processing</> : job.parseStatus === "failed" ? "Parsing failed" : "Not tailored"}</span>{job.latestTailoredCV?.aiUsage && <div className="cv-usage"><strong>{formatUsdCost(job.latestTailoredCV.aiUsage.costUsd)}</strong><span>{job.latestTailoredCV.aiUsage.model}</span><small>{formatTokenCount(job.latestTailoredCV.aiUsage.inputTokens)} in · {formatTokenCount(job.latestTailoredCV.aiUsage.outputTokens)} out</small></div>}</div></td>
           <td data-label="Status"><ApplicationTracker job={job} variant="row" onChange={updateJob} /></td>
           <td data-label="Applied"><span className="table-date">{formatDate(job.appliedAt)}</span></td>
           <td data-label="Last change"><span className="table-date">{formatDate(job.applicationStatusChangedAt ?? job.updatedAt)}</span></td>
