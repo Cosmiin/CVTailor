@@ -41,7 +41,7 @@ const readDemo = (): DemoStore => {
 
 const writeDemo = (store: DemoStore) => localStorage.setItem(STORE, JSON.stringify(store));
 export const friendlyFunctionErrorCode = (code: string) => ({
-    stale_experience_contexts: "Role context needs confirmation in Base CV before tailoring.",
+    stale_experience_contexts: "Supporting evidence needs confirmation in Base CV before tailoring.",
     openai_timeout: "Tailoring took too long to complete. Please try again.",
     openai_request_failed: "The AI service could not be reached. Please try again.",
     openai_slow_down: "The AI service is receiving requests too quickly. Please wait a moment and resume this job.",

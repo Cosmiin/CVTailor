@@ -1,6 +1,6 @@
-import { useRef, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import {
-  ArrowDown, ArrowUp, BookOpen, BriefcaseBusiness, Camera, ChevronRight, FileBadge,
+  ArrowDown, ArrowUp, BookOpen, BriefcaseBusiness, Camera, ChevronRight, CircleAlert, FileBadge,
   FolderKanban, Globe2, Languages, LayoutDashboard, PencilLine, Plus, ShieldCheck, Sparkles,
   Trash2, UserRound, X,
 } from "lucide-react";
@@ -10,7 +10,6 @@ import {
   type ExperienceEvidence, type TailoredItemProvenance,
 } from "@cv-maker/shared";
 import { prepareProfilePhoto } from "../lib/photo";
-import { ExperienceContextPanel } from "./ExperienceInterview";
 
 type Props = {
   cv: BaseCV;
@@ -19,10 +18,7 @@ type Props = {
   enrichments?: Record<string, ExperienceEnrichment>;
   evidence?: ExperienceEvidence[];
   onOpenInterview?: (experienceId: string) => void;
-  onConfirmContext?: (experienceId: string) => void;
-  onDeleteContext?: (experienceId: string) => void;
-  onEditEvidence?: (evidenceId: string, input: { label: string; statement: string }) => void;
-  onDeleteEvidence?: (evidenceId: string) => void;
+  onViewEvidence?: (experienceId: string) => void;
   onPhotoCommit?: (cv: BaseCV) => void;
 };
 const verified = (source = "user.edit"): TailoredItemProvenance => ({ status: "verified", sourceRefs: [source] });
@@ -81,7 +77,26 @@ function PhotoPositioner({ cv, onChange, baseMode, onPhotoCommit }: Props) {
   ><img ref={imageRef} src={cv.photo.dataUrl} alt="CV profile" draggable={false} style={imageStyle} /><span>Drag to center</span></div>;
 }
 
-export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, evidence = [], onOpenInterview, onConfirmContext, onDeleteContext, onEditEvidence, onDeleteEvidence, onPhotoCommit }: Props) {
+const experienceSortValue = (value: string) => {
+  if (isPresentExperienceDate(value)) return Number.MAX_SAFE_INTEGER;
+  const parsed = Date.parse(value.length === 7 ? `${value}-01` : value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const experienceAttentionNotes = (experience: BaseCV["experience"][number]) => {
+  const notes: string[] = [];
+  if (!experience.role.trim() || !experience.company.trim()) notes.push("Add role and company");
+  if (!experience.startDate.trim() || !experience.endDate.trim()) notes.push("Complete employment dates");
+  if (!experience.location.trim()) notes.push("Add location");
+  if (!experience.bullets.some((bullet) => bullet.text.trim())) notes.push("Add an achievement");
+  return notes;
+};
+
+export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, evidence = [], onOpenInterview, onViewEvidence, onPhotoCommit }: Props) {
+  const [expandedExperienceIds, setExpandedExperienceIds] = useState<Set<string>>(() => {
+    const firstExperience = [...cv.experience].sort((a, b) => experienceSortValue(b.endDate) - experienceSortValue(a.endDate) || experienceSortValue(b.startDate) - experienceSortValue(a.startDate))[0];
+    return new Set(firstExperience ? [firstExperience.id] : []);
+  });
   const updateContact = (key: keyof BaseCV["contact"], value: string) => onChange({ ...cv, contact: { ...cv.contact, [key]: value } });
   const moveSection = (index: number, direction: number) => {
     const next = [...cv.sectionOrder]; const target = index + direction;
@@ -97,6 +112,19 @@ export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, evide
   };
   const sectionLabel = (key: string) => cv.customSections.find((item) => item.id === key)?.title || key;
   const totalExperience = formatExperienceDuration(calculateExperienceMonths(cv));
+  const orderedExperiences = baseMode
+    ? [...cv.experience].sort((a, b) => experienceSortValue(b.endDate) - experienceSortValue(a.endDate) || experienceSortValue(b.startDate) - experienceSortValue(a.startDate))
+    : cv.experience;
+  const toggleExperience = (experienceId: string) => setExpandedExperienceIds((current) => {
+    const next = new Set(current);
+    if (next.has(experienceId)) next.delete(experienceId); else next.add(experienceId);
+    return next;
+  });
+  const addExperience = () => {
+    const id = createId("experience");
+    setExpandedExperienceIds((current) => new Set([...current, id]));
+    onChange({ ...cv, experience: [...cv.experience, { id, company: "", role: "", location: "", startDate: "", endDate: "", visible: true, bullets: [{ id: createId("bullet"), text: "", visible: true, provenance: verified("user.edit") }] }] });
+  };
 
   return <div className="cv-form">
     <details open><summary><span><UserRound size={17} />Identity & contact</span><ChevronRight /></summary><div className="details-body">
@@ -112,18 +140,35 @@ export function CVForm({ cv, onChange, baseMode = false, enrichments = {}, evide
     <details open><summary><span><BriefcaseBusiness size={17} />Experience <small>{cv.experience.length}</small></span><ChevronRight /></summary><div className="details-body repeat-list">
       {totalExperience && <div className="experience-total"><BriefcaseBusiness size={16} /><span><strong>{totalExperience}</strong><small>Total professional experience, with overlapping roles counted once</small></span></div>}
       {cv.experience.length === 0 && <p className="section-empty">Add your roles, employers, dates and achievements. The AI can only tailor facts you provide here.</p>}
-      {cv.experience.map((item, itemIndex) => <article className="repeat-card" key={item.id}>
-        <div className="repeat-card-head"><strong>{item.role || "New role"}{item.company ? ` · ${item.company}` : ""}</strong><div><label className="visibility-toggle"><input type="checkbox" checked={item.visible} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, visible: event.target.checked } : entry) })} />Show</label><button className="icon-button danger" aria-label="Delete experience" onClick={() => onChange({ ...cv, experience: cv.experience.filter((entry) => entry.id !== item.id) })}><Trash2 size={14} /></button></div></div>
-        <div className="form-grid"><label>Role<input placeholder="Senior Product Manager" value={item.role} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry) })} /></label><label>Company<input placeholder="Company name" value={item.company} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry) })} /></label><label>Location<input placeholder="City, country or Remote" value={item.location} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry) })} /></label><div className="date-pair"><label>From<input type="month" min="1960-01" max="2100-12" value={toExperienceMonthInput(item.startDate, "start")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry) })} /></label><label>To<input type="month" min="1960-01" max="2100-12" disabled={isPresentExperienceDate(item.endDate)} value={toExperienceMonthInput(item.endDate, "end")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.value } : entry) })} /></label><label className="current-role"><input type="checkbox" checked={isPresentExperienceDate(item.endDate)} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.checked ? "Present" : "" } : entry) })} />Current role</label></div></div>
-        <div className="achievement-label">Achievements and responsibilities</div>{item.bullets.map((bullet) => <div className="bullet-edit" key={bullet.id}><span>•</span><textarea rows={2} placeholder="Start with an action and include the result where possible." value={bullet.text} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.map((value) => value.id === bullet.id ? { ...value, text: event.target.value } : value) } : entry) })} /><button className="icon-button" aria-label="Delete bullet" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.filter((value) => value.id !== bullet.id) } : entry) })}><X size={14} /></button></div>)}
-        <button className="text-button" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: [...entry.bullets, { id: createId("bullet"), text: "", visible: true, provenance: verified(baseMode ? `base.experience.${itemIndex}` : "user.edit") }] } : entry) })}><Plus size={14} />Add achievement</button>
-        {baseMode && onOpenInterview && onConfirmContext && onDeleteContext && <ExperienceContextPanel experience={item} record={enrichments[item.id] ?? null} onOpen={() => onOpenInterview(item.id)} onConfirm={() => onConfirmContext(item.id)} onDelete={() => onDeleteContext(item.id)} />}
-        {baseMode && evidence.some((entry) => entry.experienceId === item.id) && <div className="saved-evidence-panel"><div className="saved-evidence-heading"><span><ShieldCheck size={15} />Job-confirmed evidence</span><small>Private context used only when relevant</small></div>{evidence.filter((entry) => entry.experienceId === item.id).map((entry) => {
-          const stale = entry.roleFingerprint !== experienceFingerprint(item);
-          return <article key={entry.id} className={stale ? "stale" : ""}><div><strong>{entry.label || entry.category}</strong><span>{entry.statement}</span><small>{entry.category}{stale ? " · Role changed — excluded until reconfirmed" : " · Confirmed by you"}</small></div><div><button className="text-button" onClick={() => { const label = window.prompt("Short evidence label", entry.label); if (label === null) return; const statement = window.prompt("Factual evidence statement", entry.statement); if (statement?.trim()) onEditEvidence?.(entry.id, { label, statement }); }}>Edit</button><button className="icon-button danger" aria-label="Delete saved evidence" onClick={() => onDeleteEvidence?.(entry.id)}><Trash2 size={14} /></button></div></article>;
-        })}</div>}
-      </article>)}
-      <button className="add-card-button" onClick={() => onChange({ ...cv, experience: [...cv.experience, { id: createId("experience"), company: "", role: "", location: "", startDate: "", endDate: "", visible: true, bullets: [{ id: createId("bullet"), text: "", visible: true, provenance: verified("user.edit") }] }] })}><Plus size={15} />Add experience</button>
+      {orderedExperiences.map((item) => {
+        const itemIndex = cv.experience.findIndex((entry) => entry.id === item.id);
+        const expanded = !baseMode || expandedExperienceIds.has(item.id);
+        const notes = experienceAttentionNotes(item);
+        const roleEvidence = evidence.filter((entry) => entry.experienceId === item.id);
+        const enrichment = enrichments[item.id] ?? null;
+        const contextStale = Boolean(enrichment?.active && enrichment.active.sourceFingerprint !== experienceFingerprint(item));
+        const evidenceStale = roleEvidence.some((entry) => entry.roleFingerprint !== experienceFingerprint(item));
+        const supportingCount = roleEvidence.length + (enrichment?.active ? 1 : 0);
+        const achievementCount = item.bullets.filter((bullet) => bullet.text.trim()).length;
+        return <article className={`repeat-card experience-card ${expanded ? "expanded" : "collapsed"}`} key={item.id}>
+          <div className="repeat-card-head experience-card-head">
+            {baseMode ? <button className="experience-card-toggle" type="button" aria-expanded={expanded} onClick={() => toggleExperience(item.id)}>
+              <span><strong>{item.role || "New role"}</strong><small>{item.company || "Company not set"}{item.startDate ? ` · ${item.startDate}–${isPresentExperienceDate(item.endDate) ? "Present" : item.endDate || "?"}` : ""}</small></span>
+              <ChevronRight size={17} />
+            </button> : <strong>{item.role || "New role"}{item.company ? ` · ${item.company}` : ""}</strong>}
+            <div><label className="visibility-toggle"><input type="checkbox" checked={item.visible} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, visible: event.target.checked } : entry) })} />Show</label><button className="icon-button danger" aria-label="Delete experience" onClick={() => { if (!baseMode || window.confirm(`Remove ${item.role || "this role"} and its supporting evidence?`)) onChange({ ...cv, experience: cv.experience.filter((entry) => entry.id !== item.id) }); }}><Trash2 size={14} /></button></div>
+          </div>
+          {baseMode && <div className="experience-card-summary"><span>{achievementCount} achievement{achievementCount === 1 ? "" : "s"}</span><span>{supportingCount} supporting item{supportingCount === 1 ? "" : "s"}</span>{(contextStale || evidenceStale) && <span className="needs-attention"><CircleAlert size={12} />Needs reconfirmation</span>}{onViewEvidence && <button type="button" onClick={() => onViewEvidence(item.id)}>View evidence</button>}</div>}
+          {baseMode && notes.length > 0 && <div className="experience-attention" aria-label="Suggestions for this role">{notes.slice(0, 2).map((note) => <span key={note}><CircleAlert size={12} />{note}</span>)}{notes.length > 2 && <small>+{notes.length - 2} more</small>}</div>}
+          {expanded && <div className="experience-card-body">
+            <div className="form-grid"><label>Role<input placeholder="Senior Product Manager" value={item.role} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry) })} /></label><label>Company<input placeholder="Company name" value={item.company} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, company: event.target.value } : entry) })} /></label><label>Location<input placeholder="City, country or Remote" value={item.location} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, location: event.target.value } : entry) })} /></label><div className="date-pair"><label>From<input type="month" min="1960-01" max="2100-12" value={toExperienceMonthInput(item.startDate, "start")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, startDate: event.target.value } : entry) })} /></label><label>To<input type="month" min="1960-01" max="2100-12" disabled={isPresentExperienceDate(item.endDate)} value={toExperienceMonthInput(item.endDate, "end")} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.value } : entry) })} /></label><label className="current-role"><input type="checkbox" checked={isPresentExperienceDate(item.endDate)} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, endDate: event.target.checked ? "Present" : "" } : entry) })} />Current role</label></div></div>
+            <div className="achievement-label">Achievements and responsibilities</div>{item.bullets.map((bullet) => <div className="bullet-edit" key={bullet.id}><span>•</span><textarea rows={2} placeholder="Start with an action and include the result where possible." value={bullet.text} onChange={(event) => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.map((value) => value.id === bullet.id ? { ...value, text: event.target.value } : value) } : entry) })} /><button className="icon-button" aria-label="Delete bullet" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: entry.bullets.filter((value) => value.id !== bullet.id) } : entry) })}><X size={14} /></button></div>)}
+            <button className="text-button" onClick={() => onChange({ ...cv, experience: cv.experience.map((entry) => entry.id === item.id ? { ...entry, bullets: [...entry.bullets, { id: createId("bullet"), text: "", visible: true, provenance: verified(baseMode ? `base.experience.${itemIndex}` : "user.edit") }] } : entry) })}><Plus size={14} />Add achievement</button>
+            {baseMode && <div className={`supporting-evidence-summary ${(contextStale || evidenceStale) ? "stale" : ""}`}><div><ShieldCheck size={16} /><span><strong>Supporting evidence</strong><small>{supportingCount ? `${supportingCount} private item${supportingCount === 1 ? "" : "s"} available for tailoring.` : "Add private context that does not belong on the public CV."}</small></span></div><div>{onViewEvidence && <button className="button button-small button-ghost" onClick={() => onViewEvidence(item.id)}>View evidence</button>}{onOpenInterview && <button className="button button-small button-dark" onClick={() => onOpenInterview(item.id)}><Sparkles size={14} />{enrichment?.draft ? "Resume interview" : enrichment?.active ? "Update context" : "Add context"}</button>}</div></div>}
+          </div>}
+        </article>;
+      })}
+      <button className="add-card-button" onClick={addExperience}><Plus size={15} />Add experience</button>
     </div></details>
 
     <details><summary><span><BookOpen size={17} />Education <small>{cv.education.length}</small></span><ChevronRight /></summary><div className="details-body repeat-list">
