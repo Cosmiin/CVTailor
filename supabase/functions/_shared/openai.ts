@@ -1,3 +1,5 @@
+import { parseTranscriptionUsage } from "./transcription-usage.ts";
+
 type StructuredResponseOptions = {
   modelEnv?: string;
   timeoutMs?: number;
@@ -138,7 +140,12 @@ export const transcribeAudioFile = async (file: File) => {
       });
       if (response.ok) {
         const payload = await response.json();
-        return { text: String(payload?.text ?? ""), model };
+        return {
+          text: String(payload?.text ?? ""),
+          model,
+          providerRequestId: response.headers.get("x-request-id") ?? undefined,
+          usage: parseTranscriptionUsage(payload?.usage),
+        };
       }
       const payload = await response.json().catch(() => ({}));
       const providerCode = String(payload?.error?.code ?? "");

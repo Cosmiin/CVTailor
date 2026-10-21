@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTokenCount, formatUsdCost } from "./usage";
+import { formatDurationSeconds, formatTokenCount, formatUsdCost } from "./usage";
 
 describe("AI usage formatting", () => {
   it("keeps small model costs visible", () => {
@@ -10,5 +10,10 @@ describe("AI usage formatting", () => {
 
   it("formats token counts without abbreviating audit values", () => {
     expect(formatTokenCount(1234567)).toBe("1,234,567");
+  });
+
+  it("formats provider-reported transcription duration", () => {
+    expect(formatDurationSeconds(42.4)).toBe("42 sec");
+    expect(formatDurationSeconds(90)).toBe("1:30");
   });
 });

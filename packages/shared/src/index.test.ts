@@ -19,6 +19,8 @@ describe("shared CV rules", () => {
       createdAt: "2026-10-20T10:00:00.000Z",
     });
     expect(usage.cachedInputTokens).toBe(0);
+    expect(usage.usageType).toBe("tokens");
+    expect(usage.durationSeconds).toBe(0);
     expect(usage.totalTokens).toBe(5150);
   });
 

@@ -560,7 +560,7 @@ export const dataApi = {
       const store = readDemo();
       const skill = { id: "inferred-ai", text: "Experimentation strategy", visible: true, provenance: { status: "inferred_unconfirmed" as const, sourceRefs: ["job.description"], rationale: "The role emphasizes experimentation; confirm that this reflects your experience." } };
       const createdAt = new Date().toISOString();
-      const aiUsage: AiUsageRecord = { id: crypto.randomUUID(), purpose: "cv_tailoring", model: "gpt-6.1-sol", inputTokens: 4200, cachedInputTokens: 0, outputTokens: 950, totalTokens: 5150, costUsd: 0.0179, createdAt };
+      const aiUsage: AiUsageRecord = { id: crypto.randomUUID(), purpose: "cv_tailoring", model: "gpt-6.1-sol", usageType: "tokens", inputTokens: 4200, cachedInputTokens: 0, audioInputTokens: 0, textInputTokens: 0, outputTokens: 950, totalTokens: 5150, durationSeconds: 0, costUsd: 0.0179, createdAt };
       const cv = tailoredCVSchema.parse({ ...store.baseCV, jobId: job.id, templateId, generatedAt: createdAt, aiUsage, summary: { ...store.baseCV.summary, text: `Product operations leader aligning planning, experimentation and customer insight to help ${job.company || "growing teams"} deliver better outcomes.` }, skills: [...store.baseCV.skills, skill] });
       const index = store.jobs.findIndex((item) => item.id === job.id);
       store.jobs[index] = { ...store.jobs[index], latestTailoredCV: cv, templateId, updatedAt: new Date().toISOString() };
@@ -683,8 +683,9 @@ export const dataApi = {
       const events = readDemo().aiUsage ?? [];
       const byModel = new Map<string, AiUsageSummary["byModel"][number]>();
       for (const event of events) {
-        const current = byModel.get(event.model) ?? { model: event.model, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, eventCount: 0, unpricedEvents: 0 };
+        const current = byModel.get(event.model) ?? { model: event.model, inputTokens: 0, outputTokens: 0, totalTokens: 0, durationSeconds: 0, costUsd: 0, eventCount: 0, unpricedEvents: 0 };
         current.inputTokens += event.inputTokens; current.outputTokens += event.outputTokens; current.totalTokens += event.totalTokens;
+        current.durationSeconds += event.durationSeconds ?? 0;
         current.costUsd += event.costUsd ?? 0; current.eventCount += 1; current.unpricedEvents += event.costUsd === null ? 1 : 0;
         byModel.set(event.model, current);
       }
@@ -692,6 +693,7 @@ export const dataApi = {
         inputTokens: events.reduce((sum, event) => sum + event.inputTokens, 0),
         outputTokens: events.reduce((sum, event) => sum + event.outputTokens, 0),
         totalTokens: events.reduce((sum, event) => sum + event.totalTokens, 0),
+        durationSeconds: events.reduce((sum, event) => sum + (event.durationSeconds ?? 0), 0),
         costUsd: events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0),
         eventCount: events.length,
         unpricedEvents: events.filter((event) => event.costUsd === null).length,

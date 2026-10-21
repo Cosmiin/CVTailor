@@ -1,5 +1,5 @@
 begin;
-select plan(21);
+select plan(27);
 
 select has_table('public', 'base_cvs', 'base CV table exists');
 select has_table('public', 'jobs', 'jobs table exists');
@@ -21,6 +21,12 @@ select has_function('public', 'claim_job_interview_ai_run', array['uuid'], 'evid
 select has_table('public', 'voice_transcription_runs', 'voice transcription request ledger exists');
 select has_column('public', 'voice_transcription_runs', 'audio_bytes', 'voice ledger stores only request metadata');
 select has_function('public', 'reserve_voice_transcription', array['integer'], 'voice transcription reservations are rate limited');
+select has_column('public', 'ai_model_prices', 'duration_usd_per_minute', 'AI price snapshots support duration billing');
+select has_column('public', 'ai_usage_events', 'usage_type', 'AI usage records their provider billing shape');
+select has_column('public', 'ai_usage_events', 'duration_seconds', 'AI usage records provider-reported audio duration');
+select has_column('public', 'ai_usage_events', 'audio_input_tokens', 'AI usage records audio token detail when supplied');
+select has_column('public', 'ai_usage_events', 'text_input_tokens', 'AI usage records text token detail when supplied');
+select has_function('public', 'record_transcription_usage', array['text', 'uuid', 'text', 'text', 'integer', 'integer', 'integer', 'integer', 'numeric', 'text'], 'transcription usage has dedicated accounting');
 select results_eq(
   $$ select global_monthly_limit from public.app_settings where singleton = true $$,
   array[5],

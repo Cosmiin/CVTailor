@@ -5,16 +5,21 @@ export type AiUsagePurpose =
   | "experience_synthesis"
   | "job_analysis"
   | "job_synthesis"
-  | "cv_tailoring";
+  | "cv_tailoring"
+  | "voice_transcription";
 
 export type AiUsageRecord = {
   id: string;
   purpose: AiUsagePurpose;
   model: string;
+  usageType?: "tokens" | "duration" | "unknown";
   inputTokens: number;
   cachedInputTokens: number;
+  audioInputTokens?: number;
+  textInputTokens?: number;
   outputTokens: number;
   totalTokens: number;
+  durationSeconds?: number;
   costUsd: number | null;
   createdAt: string;
 };

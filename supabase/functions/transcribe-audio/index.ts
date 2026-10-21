@@ -33,7 +33,7 @@ Deno.serve(async (request) => {
       return json(request, { error: "voice_transcription_file_too_large" }, 413);
     }
 
-    const { client } = await requireUser(request);
+    const { client, user } = await requireUser(request);
     admin = adminClient();
     let form: FormData;
     try { form = await request.formData(); }
@@ -66,6 +66,19 @@ Deno.serve(async (request) => {
     await admin.from("voice_transcription_runs").update({ model: configuredModel }).eq("id", runId).eq("status", "reserved");
 
     const result = await transcribeAudioFile(candidate);
+    const { error: usageError } = await admin.rpc("record_transcription_usage", {
+      p_operation_key: `voice:${runId}`,
+      p_user_id: user.id,
+      p_model: result.model,
+      p_usage_type: result.usage.type,
+      p_input_tokens: result.usage.inputTokens,
+      p_audio_input_tokens: result.usage.audioInputTokens,
+      p_text_input_tokens: result.usage.textInputTokens,
+      p_output_tokens: result.usage.outputTokens,
+      p_duration_seconds: result.usage.seconds,
+      p_provider_response_id: result.providerRequestId ?? null,
+    });
+    if (usageError) throw new Error("ai_usage_record_failed");
     const text = normalizeTranscript(result.text);
     if (!text) throw new Error("voice_transcript_empty");
     if (text.length > MAX_TRANSCRIPT_CHARACTERS) throw new Error("voice_transcript_too_long");
