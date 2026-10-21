@@ -28,7 +28,9 @@ On an explicit capture, the extension sends the visible listing and any `JobPost
 authenticated `import-job` function. The capture is saved and returned immediately, while a
 Supabase background task uses strict AI structured output to identify the primary role, company,
 location, compensation, responsibilities, requirements, languages, and benefits in the source
-language. The web app polls the saved job until the full profile is ready. Job parsing is separate
+language. A verified OpenAI webhook finalizes the saved job on the server, with a scheduled
+reconciliation worker and the authenticated status endpoint as recovery paths. The applications
+view receives database updates live and refreshes pending rows periodically. Job parsing is separate
 from the monthly CV-tailoring quota.
 
 ## Deployment

@@ -1,11 +1,20 @@
 begin;
-select plan(27);
+select plan(36);
 
 select has_table('public', 'base_cvs', 'base CV table exists');
 select has_table('public', 'jobs', 'jobs table exists');
 select has_table('public', 'tailor_runs', 'usage audit table exists');
 select has_column('public', 'jobs', 'parse_response_id', 'jobs track background parsing responses');
 select has_column('public', 'jobs', 'parse_provider_status', 'jobs expose provider parsing state');
+select has_column('public', 'jobs', 'parse_finalization_status', 'jobs track server-side finalization state');
+select has_column('public', 'jobs', 'parse_finalization_claimed_at', 'job finalization claims can expire');
+select has_column('public', 'jobs', 'parse_finalization_attempts', 'job finalization attempts are counted');
+select has_column('public', 'jobs', 'parse_next_check_at', 'pending job checks use bounded backoff');
+select has_column('public', 'jobs', 'parse_finalization_error', 'job finalization stores stable error codes');
+select has_table('public', 'openai_response_events', 'verified OpenAI response events have a durable inbox');
+select has_function('public', 'claim_job_parse_finalization', array['text'], 'job parse finalization is atomically claimed');
+select has_function('public', 'claim_openai_response_events', array['integer'], 'OpenAI response events are atomically claimed');
+select has_function('public', 'invoke_job_parse_finalizer', array[]::text[], 'scheduled job finalization invocation exists');
 select policies_are('public', 'base_cvs', array['base_cvs_own'], 'base CV access is user-scoped');
 select policies_are('public', 'jobs', array['jobs_own'], 'job access is user-scoped');
 select has_column('public', 'jobs', 'structured_data', 'jobs store validated structured extraction');

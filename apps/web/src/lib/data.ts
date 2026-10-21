@@ -483,6 +483,16 @@ export const dataApi = {
     return (data ?? []).map(rowToJob);
   },
 
+  subscribeToJobUpdates(onUpdate: (job: JobRecord) => void): () => void {
+    if (!isSupabaseConfigured) return () => undefined;
+    const channel = supabase!.channel(`jobs-live-${crypto.randomUUID()}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "jobs" }, (payload) => {
+        if (payload.new) onUpdate(rowToJob(payload.new));
+      })
+      .subscribe();
+    return () => { void supabase!.removeChannel(channel); };
+  },
+
   async getJob(jobId: string): Promise<JobRecord | null> {
     if (!isSupabaseConfigured) return readDemo().jobs.find((job) => job.id === jobId) ?? null;
     const { data, error } = await supabase!.from("jobs").select("*").eq("id", jobId).maybeSingle();

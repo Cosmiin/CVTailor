@@ -41,6 +41,9 @@ export const applicationCounts = (jobs: JobRecord[]) => ({
   offers: jobs.filter((job) => job.applicationStatus === "offer").length,
 });
 
+export const mergeJobUpdate = (jobs: JobRecord[], updated: JobRecord) =>
+  jobs.map((job) => job.id === updated.id ? updated : job);
+
 const formatDate = (value: string | null) => value
   ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value))
   : "—";
@@ -77,6 +80,15 @@ export function ApplicationsPage({ onUsage }: { onUsage: () => void }) {
 
   const load = useCallback(() => dataApi.listJobs().then(setJobs).finally(() => setLoading(false)), []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => dataApi.subscribeToJobUpdates((updated) => {
+    setJobs((current) => mergeJobUpdate(current, updated));
+  }), []);
+  const hasPendingJobs = jobs.some((job) => job.parseStatus === "pending");
+  useEffect(() => {
+    if (!hasPendingJobs) return;
+    const timer = window.setInterval(() => { void load(); }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingJobs, load]);
 
   const importJob = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
@@ -94,8 +106,7 @@ export function ApplicationsPage({ onUsage }: { onUsage: () => void }) {
     if (!confirm("Delete this job and its tailored CV?")) return;
     await dataApi.deleteJob(id); await load();
   };
-  const updateJob = (updated: JobRecord) => setJobs((current) =>
-    current.map((job) => job.id === updated.id ? updated : job));
+  const updateJob = (updated: JobRecord) => setJobs((current) => mergeJobUpdate(current, updated));
   const visibleJobs = useMemo(() => filterApplications(jobs, query, status), [jobs, query, status]);
   const counts = useMemo(() => applicationCounts(jobs), [jobs]);
 

@@ -49,5 +49,11 @@ verify_jwt = true
 [functions.transcribe-audio]
 verify_jwt = true
 
+[functions.openai-response-webhook]
+verify_jwt = false
+
+[functions.finalize-job-parses]
+verify_jwt = false
+
 [functions.delete-account]
 verify_jwt = true

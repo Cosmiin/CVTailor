@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ApplicationStatus } from "@cv-maker/shared";
 import type { JobRecord } from "../lib/data";
-import { applicationCounts, encouragementMessages, filterApplications } from "./ApplicationsPage";
+import { applicationCounts, encouragementMessages, filterApplications, mergeJobUpdate } from "./ApplicationsPage";
 
 const job = (id: string, company: string, title: string, applicationStatus: ApplicationStatus): JobRecord => ({
   schemaVersion: 2,
@@ -48,6 +48,12 @@ describe("applications dashboard", () => {
     expect(applicationCounts(jobs)).toEqual({ applied: 3, waiting: 1, active: 1, offers: 1 });
     expect(encouragementMessages.length).toBeGreaterThanOrEqual(5);
     expect(encouragementMessages.length).toBeLessThanOrEqual(10);
+  });
+
+  it("merges a server-side parsing update into the visible jobs", () => {
+    const pending = { ...jobs[0], parseStatus: "pending" as const };
+    const completed = { ...pending, parseStatus: "completed" as const, title: "Parsed title" };
+    expect(mergeJobUpdate([pending, jobs[1]], completed)).toEqual([completed, jobs[1]]);
   });
 });
 
